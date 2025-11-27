@@ -1,452 +1,522 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barakah Apps - Islamic Android Applications</title>
-    <!-- Tailwind CSS -->
+    <title>MapWays - Affordable Digital Wayfinding</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Font Awesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     
+    <!-- FIREBASE SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            scroll-behavior: smooth;
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-text {
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .nav-link.active {
-            color: #10B981; /* Emerald 500 */
-            font-weight: 600;
+        .blob {
+            position: absolute;
+            filter: blur(80px);
+            z-index: -1;
+            opacity: 0.4;
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800 flex flex-col min-h-screen">
+<body class="bg-slate-50 text-slate-800 antialiased overflow-x-hidden">
 
-    <!-- Navigation -->
-    <nav class="bg-white shadow-sm sticky top-0 z-50">
+    <!-- NAVIGATION -->
+    <nav class="fixed w-full z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 transition-all duration-300" id="navbar">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center cursor-pointer" onclick="navigateTo('home')">
-                    <i class="fa-solid fa-mosque text-emerald-600 text-2xl mr-2"></i>
-                    <span class="font-bold text-xl tracking-tight text-gray-900">Barakah Apps</span>
+            <div class="flex justify-between h-20 items-center">
+                <!-- Logo -->
+                <div class="flex items-center space-x-2 cursor-pointer" onclick="window.scrollTo(0,0)">
+                    <div class="bg-gradient-to-br from-blue-600 to-indigo-600 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+                        <i class="fas fa-location-arrow text-white text-lg transform -rotate-45"></i>
+                    </div>
+                    <span class="font-bold text-xl tracking-tight text-slate-900">MapWays<span class="text-blue-600">.io</span></span>
                 </div>
-                
+
                 <!-- Desktop Menu -->
-                <div class="hidden md:flex items-center space-x-8">
-                    <button onclick="navigateTo('home')" class="nav-link text-gray-600 hover:text-emerald-600 transition">Home</button>
-                    <button onclick="navigateTo('home', 'apps-section')" class="nav-link text-gray-600 hover:text-emerald-600 transition">Our Apps</button>
-                    <button onclick="navigateTo('custom-dev')" class="nav-link text-gray-600 hover:text-emerald-600 transition">Custom Dev</button>
-                    <button onclick="navigateTo('privacy')" class="nav-link text-gray-600 hover:text-emerald-600 transition">Privacy Policy</button>
-                    <button onclick="navigateTo('contact')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition shadow-sm">Contact Us</button>
+                <div class="hidden md:flex space-x-8 items-center">
+                    <a href="#benefits" class="text-sm font-medium text-slate-500 hover:text-blue-600 transition">Why Us?</a>
+                    <a href="#demo" class="text-sm font-medium text-slate-500 hover:text-blue-600 transition">Demo</a>
+                    <a href="#testimonials" class="text-sm font-medium text-slate-500 hover:text-blue-600 transition">Stories</a>
+                    <a href="#pricing" class="text-sm font-medium text-slate-500 hover:text-blue-600 transition">Pricing</a>
                 </div>
 
-                <!-- Mobile Menu Button -->
-                <div class="md:hidden flex items-center">
-                    <button onclick="toggleMobileMenu()" class="text-gray-600 hover:text-gray-900 focus:outline-none">
-                        <i class="fa-solid fa-bars text-2xl"></i>
+                <!-- Auth Buttons -->
+                <div>
+                    <button id="nav-cta" onclick="openLogin()" class="group relative px-6 py-2.5 rounded-full bg-slate-900 text-white font-medium hover:bg-blue-600 transition-all duration-300 shadow-lg hover:shadow-blue-500/25 overflow-hidden">
+                        <span class="relative z-10">Get Started</span>
+                        <div class="absolute inset-0 h-full w-full scale-0 rounded-full transition-all duration-300 group-hover:scale-100 group-hover:bg-blue-600/50"></div>
                     </button>
+                    
+                    <!-- User Profile (Hidden) -->
+                    <div id="nav-profile" class="hidden items-center space-x-4 bg-slate-100 py-1.5 px-3 rounded-full border border-slate-200">
+                         <img id="nav-avatar" src="" class="w-8 h-8 rounded-full border-2 border-white shadow-sm">
+                         <div class="flex flex-col leading-none">
+                             <span id="nav-name" class="font-bold text-xs text-slate-700"></span>
+                             <button onclick="logout()" class="text-[10px] text-red-500 hover:text-red-700 text-left mt-0.5 font-medium">Sign Out</button>
+                         </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Mobile Menu Dropdown -->
-        <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-gray-100">
-            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-                <button onclick="navigateTo('home'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Home</button>
-                <button onclick="navigateTo('home', 'apps-section'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Our Apps</button>
-                <button onclick="navigateTo('custom-dev'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Custom Dev</button>
-                <button onclick="navigateTo('privacy'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Privacy Policy</button>
-                <button onclick="navigateTo('cookie'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Cookie Policy</button>
-                <button onclick="navigateTo('contact'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Contact Us</button>
             </div>
         </div>
     </nav>
 
-    <!-- Main Content Area -->
-    <main id="main-content" class="flex-grow">
-        <!-- Content will be injected here by JavaScript -->
-    </main>
+    <!-- HERO SECTION -->
+    <div class="relative pt-40 pb-20 overflow-hidden">
+        <!-- Background Blobs -->
+        <div class="blob bg-blue-400 w-96 h-96 rounded-full top-0 -left-20"></div>
+        <div class="blob bg-purple-400 w-96 h-96 rounded-full bottom-0 -right-20"></div>
 
-    <!-- Footer -->
-    <footer class="bg-gray-900 text-white pt-12 pb-8">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-                <div class="col-span-1 md:col-span-1">
-                    <div class="flex items-center mb-4">
-                        <i class="fa-solid fa-mosque text-emerald-500 text-xl mr-2"></i>
-                        <span class="font-bold text-lg">Barakah Apps</span>
-                    </div>
-                    <p class="text-gray-400 text-sm">
-                        Creating beneficial digital experiences for the Ummah. Quality Android applications focusing on productivity and spirituality.
-                    </p>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Links</h3>
-                    <ul class="space-y-2">
-                        <li><button onclick="navigateTo('home')" class="text-gray-400 hover:text-white text-sm">Home</button></li>
-                        <li><button onclick="navigateTo('custom-dev')" class="text-gray-400 hover:text-white text-sm">Services</button></li>
-                        <li><button onclick="navigateTo('contact')" class="text-gray-400 hover:text-white text-sm">Contact</button></li>
-                    </ul>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Legal</h3>
-                    <ul class="space-y-2">
-                        <li><button onclick="navigateTo('privacy')" class="text-gray-400 hover:text-white text-sm">Privacy Policy</button></li>
-                        <li><button onclick="navigateTo('cookie')" class="text-gray-400 hover:text-white text-sm">Cookie Policy</button></li>
-                        <li><button onclick="navigateTo('terms')" class="text-gray-400 hover:text-white text-sm">Terms of Use</button></li>
-                    </ul>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Connect</h3>
-                    <div class="flex space-x-4">
-                        <a href="#" class="text-gray-400 hover:text-white"><i class="fab fa-google-play text-xl"></i></a>
-                        <a href="#" class="text-gray-400 hover:text-white"><i class="fab fa-twitter text-xl"></i></a>
-                        <a href="#" class="text-gray-400 hover:text-white"><i class="fab fa-instagram text-xl"></i></a>
-                        <a href="#" class="text-gray-400 hover:text-white"><i class="fas fa-envelope text-xl"></i></a>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <div class="inline-flex items-center px-4 py-2 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-sm font-semibold mb-8 animate-bounce">
+                <span class="flex h-2 w-2 rounded-full bg-blue-600 mr-2"></span>
+                v2.0 Now Live: Smart Pathfinding Algorithm
+            </div>
+            
+            <h1 class="text-5xl md:text-7xl font-extrabold text-slate-900 tracking-tight mb-6">
+                Navigate the World, <br>
+                <span class="gradient-text">One Floor at a Time.</span>
+            </h1>
+            
+            <p class="text-lg md:text-xl text-slate-600 mb-10 max-w-2xl mx-auto leading-relaxed">
+                The most cost-effective digital wayfinding solution for buildings. 
+                Upload plans, draw paths, and sync to any Android tablet in minutes.
+            </p>
+
+            <div class="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <button onclick="scrollToPricing()" class="px-8 py-4 rounded-xl bg-blue-600 text-white font-bold text-lg shadow-xl shadow-blue-500/30 hover:bg-blue-700 hover:scale-105 transition-all duration-200 w-full sm:w-auto">
+                    Start Building Free
+                </button>
+                <button onclick="document.getElementById('demo').scrollIntoView()" class="px-8 py-4 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-lg hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center w-full sm:w-auto justify-center">
+                    <i class="fas fa-play text-blue-500 mr-3"></i> Watch Demo
+                </button>
+            </div>
+            
+            <p class="mt-6 text-sm text-slate-500 font-medium">
+                <i class="fas fa-shield-alt text-green-500 mr-1"></i> No Credit Card Required for Setup
+            </p>
+
+            <!-- Dashboard Preview Image -->
+            <div class="mt-16 relative mx-auto max-w-5xl">
+                <div class="bg-slate-900 rounded-2xl p-2 shadow-2xl border border-slate-800">
+                    <div class="bg-slate-800 rounded-xl overflow-hidden relative group cursor-pointer" onclick="openLogin()">
+                        <img src="https://placehold.co/1200x675/1e293b/FFF?text=MapWays+Dashboard+Preview" alt="Dashboard Interface" class="w-full opacity-90 group-hover:opacity-100 transition-opacity">
+                        <div class="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span class="px-6 py-3 bg-white text-slate-900 font-bold rounded-lg transform translate-y-4 group-hover:translate-y-0 transition-transform">Try the Editor</span>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400 text-sm">
-                &copy; <span id="year"></span> Barakah Apps. All rights reserved.
+        </div>
+    </div>
+
+    <!-- BENEFITS SECTION -->
+    <div id="benefits" class="py-24 bg-white relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-4xl font-bold text-slate-900 mb-4">Why Choose MapWays?</h2>
+                <p class="text-slate-500 max-w-2xl mx-auto">Traditional digital signage costs thousands. We engineered a solution that costs less than a coffee per month.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+                <!-- Feature 1 -->
+                <div class="group p-8 rounded-3xl bg-slate-50 hover:bg-blue-50 transition-colors duration-300 border border-slate-100 hover:border-blue-100">
+                    <div class="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-piggy-bank text-2xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-3">Unbeatable Value</h3>
+                    <p class="text-slate-600 leading-relaxed">
+                        Competitors charge $50/month per screen. We charge a <strong>$1 flat fee</strong> per floor map. Unlimited devices per map.
+                    </p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="group p-8 rounded-3xl bg-slate-50 hover:bg-purple-50 transition-colors duration-300 border border-slate-100 hover:border-purple-100">
+                    <div class="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-600 mb-6 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-tablet-alt text-2xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-3">BYO Hardware</h3>
+                    <p class="text-slate-600 leading-relaxed">
+                        Don't buy proprietary kiosks. MapWays runs beautifully on any cheap Android tablet or TV box you already own.
+                    </p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="group p-8 rounded-3xl bg-slate-50 hover:bg-green-50 transition-colors duration-300 border border-slate-100 hover:border-green-100">
+                    <div class="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-wifi text-2xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-3">100% Offline Capable</h3>
+                    <p class="text-slate-600 leading-relaxed">
+                        Internet down? No problem. Once synced, your kiosks work completely offline, ensuring 100% uptime for visitors.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIDEO DEMO SECTION -->
+    <div id="demo" class="py-20 bg-slate-900 text-white">
+        <div class="max-w-6xl mx-auto px-4 text-center">
+            <h2 class="text-3xl font-bold mb-8">See How Fast It Is</h2>
+            <div class="relative w-full max-w-4xl mx-auto aspect-video rounded-2xl overflow-hidden shadow-2xl border border-slate-700 bg-slate-800 group cursor-pointer">
+                <!-- Placeholder for Video Embed -->
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <div class="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center pl-2 group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/50">
+                        <i class="fas fa-play text-2xl text-white"></i>
+                    </div>
+                </div>
+                <img src="https://placehold.co/1200x675/1e293b/FFF?text=Video+Placeholder" class="w-full h-full object-cover opacity-50 group-hover:opacity-75 transition-opacity">
+            </div>
+            <p class="mt-6 text-slate-400">Watch us map an entire shopping mall floor in under 3 minutes.</p>
+        </div>
+    </div>
+
+    <!-- TESTIMONIALS -->
+    <div id="testimonials" class="py-24 bg-slate-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <h2 class="text-3xl font-bold text-center text-slate-900 mb-16">Loved by Facility Managers</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                
+                <!-- Review 1 -->
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex text-yellow-400 mb-4">
+                        <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                    </div>
+                    <p class="text-slate-600 mb-6">"We were quoted $15,000 for a custom wayfinding system. MapWays did it for $29 and a cheap tablet. It's a no-brainer."</p>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500 font-bold">JD</div>
+                        <div>
+                            <p class="font-bold text-slate-900 text-sm">John Doe</p>
+                            <p class="text-xs text-slate-500">Mall Operations Manager</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Review 2 -->
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex text-yellow-400 mb-4">
+                        <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                    </div>
+                    <p class="text-slate-600 mb-6">"The 'no-code' editor is actually true. I drew the paths myself in 10 minutes. The pathfinding works perfectly."</p>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500 font-bold">SM</div>
+                        <div>
+                            <p class="font-bold text-slate-900 text-sm">Sarah Miller</p>
+                            <p class="text-xs text-slate-500">University Campus Admin</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Review 3 -->
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex text-yellow-400 mb-4">
+                        <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star-half-alt"></i>
+                    </div>
+                    <p class="text-slate-600 mb-6">"Finally, a solution that lets us update store locations instantly without calling a developer. Highly recommended."</p>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500 font-bold">MK</div>
+                        <div>
+                            <p class="font-bold text-slate-900 text-sm">Mike K.</p>
+                            <p class="text-xs text-slate-500">Hospital Director</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- PRICING SECTION -->
+    <div id="pricing" class="py-24 bg-white">
+        <div class="max-w-4xl mx-auto px-4 text-center">
+            <h2 class="text-3xl font-bold text-slate-900 mb-4">Simple, Transparent Pricing</h2>
+            <p class="text-slate-500 mb-12">Pay once to unlock the platform. Then pay peanuts to keep it running.</p>
+            
+            <div class="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 relative max-w-md mx-auto transform transition-transform hover:-translate-y-2">
+                <div class="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-xs font-bold px-4 py-1 rounded-bl-xl uppercase tracking-wide">
+                    Lifetime Account Access
+                </div>
+                <div class="p-10">
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">Standard License</h3>
+                    <div class="flex justify-center items-end space-x-2 mb-6">
+                        <span class="text-5xl font-extrabold text-slate-900">$29</span>
+                        <span class="text-slate-500 mb-1 font-medium">one-time</span>
+                    </div>
+                    <p class="text-sm text-slate-500 mb-8 border-b border-slate-100 pb-8">
+                        + just <strong class="text-slate-900">$1.00</strong> / month per active floor map
+                    </p>
+                    
+                    <ul class="text-left space-y-4 mb-8 text-slate-600">
+                        <li class="flex items-center"><i class="fas fa-check-circle text-blue-500 mr-3"></i> Unlimited Draft Maps</li>
+                        <li class="flex items-center"><i class="fas fa-check-circle text-blue-500 mr-3"></i> Drag & Drop Editor</li>
+                        <li class="flex items-center"><i class="fas fa-check-circle text-blue-500 mr-3"></i> Unlimited Device Sync</li>
+                        <li class="flex items-center"><i class="fas fa-check-circle text-blue-500 mr-3"></i> Analytics Dashboard</li>
+                        <li class="flex items-center"><i class="fas fa-check-circle text-blue-500 mr-3"></i> Commercial Use License</li>
+                    </ul>
+
+                    <button id="pricing-cta" onclick="openLogin('pricing')" class="w-full py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg shadow-lg shadow-blue-500/30 transition-all duration-200">
+                        Get Instant Access
+                    </button>
+                    <p class="text-xs text-slate-400 mt-4">Secure payment via Stripe • 30-day money-back guarantee</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTACT SECTION -->
+    <div id="contact" class="py-20 bg-slate-50 border-t border-slate-200">
+        <div class="max-w-4xl mx-auto px-4 text-center">
+            <h2 class="text-3xl font-bold text-slate-900 mb-8">Need a Custom Enterprise Plan?</h2>
+            <p class="text-slate-600 mb-8">Managing over 50 floors? We offer bulk discounts and dedicated support.</p>
+            <a href="mailto:support@mapways.io" class="inline-flex items-center px-6 py-3 border border-slate-300 shadow-sm text-base font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50">
+                <i class="far fa-envelope mr-2"></i> Contact Sales
+            </a>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="bg-slate-900 text-slate-400 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+                <div class="col-span-1 md:col-span-1">
+                     <span class="font-bold text-xl tracking-tight text-white mb-4 block">MapWays<span class="text-blue-500">.io</span></span>
+                     <p class="text-sm">Simplifying indoor navigation for everyone, everywhere.</p>
+                </div>
+                <div>
+                    <h4 class="text-white font-bold mb-4">Product</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#" class="hover:text-blue-400">Features</a></li>
+                        <li><a href="#" class="hover:text-blue-400">Hardware Guide</a></li>
+                        <li><a href="#" class="hover:text-blue-400">Pricing</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="text-white font-bold mb-4">Company</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#" class="hover:text-blue-400">About Us</a></li>
+                        <li><a href="#" class="hover:text-blue-400">Blog</a></li>
+                        <li><a href="#" class="hover:text-blue-400">Contact</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="text-white font-bold mb-4">Legal</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#" class="hover:text-blue-400">Privacy Policy</a></li>
+                        <li><a href="#" class="hover:text-blue-400">Terms of Service</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-slate-800 pt-8 text-sm text-center md:text-left flex flex-col md:flex-row justify-between items-center">
+                <p>&copy; 2025 MapWays. All rights reserved.</p>
+                <div class="flex space-x-4 mt-4 md:mt-0">
+                    <a href="#" class="hover:text-white"><i class="fab fa-twitter"></i></a>
+                    <a href="#" class="hover:text-white"><i class="fab fa-github"></i></a>
+                    <a href="#" class="hover:text-white"><i class="fab fa-linkedin"></i></a>
+                </div>
             </div>
         </div>
     </footer>
 
-    <!-- JavaScript Application Logic -->
+    <!-- MODAL: GOOGLE LOGIN -->
+    <div id="login-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-slate-900/60 backdrop-blur-sm opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full transform scale-95 transition-transform duration-300">
+            <div class="text-center mb-6">
+                <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
+                    <i class="fas fa-user-circle text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900">Welcome Back</h3>
+                <p class="text-sm text-slate-500 mt-1">Sign in to access your dashboard</p>
+            </div>
+            
+            <button onclick="handleRealGoogleLogin()" class="w-full border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold py-3 px-4 rounded-xl flex items-center justify-center transition-all duration-200 group relative overflow-hidden">
+                <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-5 h-5 mr-3 group-hover:scale-110 transition-transform" alt="Google">
+                <span class="relative z-10">Continue with Google</span>
+            </button>
+            
+            <button onclick="closeModal('login-modal')" class="mt-6 text-sm text-slate-400 hover:text-slate-600 block mx-auto font-medium">Cancel</button>
+        </div>
+    </div>
+
+    <!-- MODAL: PAYMENT REQUIRED -->
+    <div id="payment-modal" class="fixed inset-0 z-[70] hidden flex items-center justify-center bg-slate-900/70 backdrop-blur-md opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center transform scale-95 transition-transform duration-300 border border-slate-100">
+            <div class="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                <i class="fas fa-lock text-blue-600 text-3xl"></i>
+            </div>
+            <h3 class="text-2xl font-bold text-slate-900 mb-2">Activate Your Account</h3>
+            <p class="text-slate-600 mb-8 leading-relaxed">
+                You're one step away! Pay the one-time activation fee to unlock the full MapWays Studio.
+            </p>
+            
+            <button onclick="redirectToStripe()" class="w-full py-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold shadow-xl shadow-blue-500/30 transition-all duration-200 flex justify-center items-center group">
+                <span>Pay $29 Activation Fee</span>
+                <i class="fas fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+            </button>
+            <p class="text-xs text-slate-400 mt-6 flex items-center justify-center">
+                <i class="fas fa-lock mr-1"></i> SSL Encrypted Payment
+            </p>
+        </div>
+    </div>
+
     <script>
-        // Content Data
-        const pages = {
-            home: `
-                <!-- Hero Section -->
-                <section class="bg-emerald-900 text-white relative overflow-hidden">
-                    <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/arabesque.png')]"></div>
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 relative z-10">
-                        <div class="text-center max-w-3xl mx-auto">
-                            <h1 class="text-4xl md:text-5xl font-bold mb-6 tracking-tight">Digital Solutions for the Modern Muslim</h1>
-                            <p class="text-xl text-emerald-100 mb-8">We build beautiful, privacy-focused Android applications that add barakah to your daily digital life.</p>
-                            <div class="flex justify-center gap-4">
-                                <button onclick="navigateTo('home', 'apps-section')" class="bg-white text-emerald-900 px-8 py-3 rounded-lg font-semibold hover:bg-emerald-50 transition">View Apps</button>
-                                <button onclick="navigateTo('contact')" class="border border-emerald-300 text-emerald-100 px-8 py-3 rounded-lg font-semibold hover:bg-emerald-800 transition">Contact Us</button>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Apps Showcase -->
-                <section id="apps-section" class="py-20 bg-white">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="text-center mb-16">
-                            <h2 class="text-3xl font-bold text-gray-900 mb-4">Our Applications</h2>
-                            <p class="text-gray-600 max-w-2xl mx-auto">Discover our suite of apps designed to help you maintain your spiritual habits effortlessly.</p>
-                        </div>
-
-                        <div class="grid md:grid-cols-3 gap-8">
-                            <!-- App Card 1 -->
-                            <div class="bg-gray-50 rounded-2xl p-6 hover:shadow-lg transition duration-300 border border-gray-100 flex flex-col">
-                                <div class="h-16 w-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-6 text-emerald-600">
-                                    <i class="fa-solid fa-kaaba text-3xl"></i>
-                                </div>
-                                <h3 class="text-xl font-bold text-gray-900 mb-2">Barakah Journey</h3>
-                                <p class="text-gray-600 mb-6 flex-grow">A comprehensive daily tracker for prayers, adhkar, and fasting habits with beautiful insights.</p>
-                                <div class="mt-auto">
-                                    <a href="#" class="flex items-center justify-center w-full bg-gray-900 text-white py-2 rounded-lg hover:bg-gray-800 transition">
-                                        <i class="fab fa-google-play mr-2"></i> Get on Play Store
-                                    </a>
-                                </div>
-                            </div>
-
-                            <!-- App Card 2 -->
-                            <div class="bg-gray-50 rounded-2xl p-6 hover:shadow-lg transition duration-300 border border-gray-100 flex flex-col">
-                                <div class="h-16 w-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-6 text-emerald-600">
-                                    <i class="fa-solid fa-book-quran text-3xl"></i>
-                                </div>
-                                <h3 class="text-xl font-bold text-gray-900 mb-2">Easy Quran Reader</h3>
-                                <p class="text-gray-600 mb-6 flex-grow">Distraction-free Quran reading experience with large fonts and simple translations.</p>
-                                <div class="mt-auto">
-                                    <a href="#" class="flex items-center justify-center w-full bg-gray-900 text-white py-2 rounded-lg hover:bg-gray-800 transition">
-                                        <i class="fab fa-google-play mr-2"></i> Get on Play Store
-                                    </a>
-                                </div>
-                            </div>
-
-                            <!-- App Card 3 -->
-                            <div class="bg-gray-50 rounded-2xl p-6 hover:shadow-lg transition duration-300 border border-gray-100 flex flex-col">
-                                <div class="h-16 w-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-6 text-emerald-600">
-                                    <i class="fa-solid fa-hands-holding-circle text-3xl"></i>
-                                </div>
-                                <h3 class="text-xl font-bold text-gray-900 mb-2">Smart Zakat</h3>
-                                <p class="text-gray-600 mb-6 flex-grow">Calculate your Zakat easily with current gold/silver rates and asset management.</p>
-                                <div class="mt-auto">
-                                    <a href="#" class="flex items-center justify-center w-full bg-gray-900 text-white py-2 rounded-lg hover:bg-gray-800 transition">
-                                        <i class="fab fa-google-play mr-2"></i> Get on Play Store
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Why Choose Us -->
-                <section class="py-20 bg-gray-50">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="grid md:grid-cols-2 gap-12 items-center">
-                            <div>
-                                <h2 class="text-3xl font-bold text-gray-900 mb-6">Privacy & Purity First</h2>
-                                <div class="space-y-6">
-                                    <div class="flex items-start">
-                                        <div class="flex-shrink-0">
-                                            <i class="fa-solid fa-shield-halved text-emerald-600 text-xl mt-1"></i>
-                                        </div>
-                                        <div class="ml-4">
-                                            <h4 class="text-lg font-semibold text-gray-900">No Data Mining</h4>
-                                            <p class="text-gray-600">We respect your privacy. We don't sell user data to third parties.</p>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-start">
-                                        <div class="flex-shrink-0">
-                                            <i class="fa-solid fa-ban text-emerald-600 text-xl mt-1"></i>
-                                        </div>
-                                        <div class="ml-4">
-                                            <h4 class="text-lg font-semibold text-gray-900">Ad-Free Options</h4>
-                                            <p class="text-gray-600">Clean interfaces focused on the purpose of the app, not distraction.</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-                                <div class="text-center">
-                                    <i class="fa-brands fa-android text-6xl text-emerald-500 mb-4"></i>
-                                    <h3 class="text-2xl font-bold text-gray-900">Android Specialists</h3>
-                                    <p class="text-gray-600 mt-2">Native development ensuring high performance and battery efficiency.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            `,
-            'custom-dev': `
-                <section class="bg-emerald-900 text-white py-20">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                        <h1 class="text-4xl font-bold mb-4">Custom App Development</h1>
-                        <p class="text-xl text-emerald-100">Turn your idea into a reality with our expert team.</p>
-                    </div>
-                </section>
-                
-                <section class="py-20 bg-white fade-in">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="grid md:grid-cols-2 gap-16">
-                            <div>
-                                <h3 class="text-2xl font-bold text-gray-900 mb-6">Why Work With Us?</h3>
-                                <div class="space-y-8">
-                                    <div>
-                                        <div class="h-12 w-12 bg-emerald-100 rounded-lg flex items-center justify-center mb-4 text-emerald-600">
-                                            <i class="fa-solid fa-code text-xl"></i>
-                                        </div>
-                                        <h4 class="text-xl font-semibold mb-2">Clean Code Architecture</h4>
-                                        <p class="text-gray-600">Scalable, maintainable code that grows with your user base.</p>
-                                    </div>
-                                    <div>
-                                        <div class="h-12 w-12 bg-emerald-100 rounded-lg flex items-center justify-center mb-4 text-emerald-600">
-                                            <i class="fa-solid fa-paint-roller text-xl"></i>
-                                        </div>
-                                        <h4 class="text-xl font-semibold mb-2">Modern UI/UX</h4>
-                                        <p class="text-gray-600">Interfaces that users love to interact with, following Material Design 3 guidelines.</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="bg-gray-50 p-8 rounded-2xl border border-gray-100">
-                                <h3 class="text-2xl font-bold text-gray-900 mb-6">Start a Project</h3>
-                                <p class="text-gray-600 mb-8">Interested in building a custom app for your mosque, organization, or startup?</p>
-                                <button onclick="navigateTo('contact')" class="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition">Request Consultation</button>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            `,
-            privacy: `
-                <section class="py-20 bg-white fade-in">
-                    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <h1 class="text-3xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
-                        <p class="text-gray-500 mb-8">Last updated: <span id="date-display"></span></p>
-                        
-                        <div class="prose prose-emerald max-w-none text-gray-600">
-                            <p class="mb-4">At <strong>Barakah Apps</strong>, we maintain a strict policy to ensure the privacy and security of your personal information. This Privacy Policy outlines the types of information we may collect and how it is used.</p>
-                            
-                            <h3 class="text-xl font-bold text-gray-900 mt-8 mb-4">1. Information Collection</h3>
-                            <p class="mb-4">We do not collect any personally identifiable information (PII) unless explicitly provided by you (e.g., through email support). Our apps may require permissions such as Location (for prayer times) or Storage (for downloading content), but this data remains on your device.</p>
-                            
-                            <h3 class="text-xl font-bold text-gray-900 mt-8 mb-4">2. Location Data</h3>
-                            <p class="mb-4">For applications requiring prayer times or Qibla direction, we access your precise location. This location data is processed locally on your device and is not transmitted to our servers.</p>
-                            
-                            <h3 class="text-xl font-bold text-gray-900 mt-8 mb-4">3. Third-Party Services</h3>
-                            <p class="mb-4">We may use third-party services like Google AdMob (for ads) or Firebase Analytics (for crash reporting). These services may collect anonymous identifiers to improve user experience.</p>
-                            
-                            <h3 class="text-xl font-bold text-gray-900 mt-8 mb-4">4. Contact Us</h3>
-                            <p class="mb-4">If you have any questions about this Privacy Policy, please contact us at support@barakahapps.com.</p>
-                        </div>
-                    </div>
-                </section>
-            `,
-            cookie: `
-                <section class="py-20 bg-white fade-in">
-                    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <h1 class="text-3xl font-bold text-gray-900 mb-8">Cookie Policy</h1>
-                        <div class="prose prose-emerald max-w-none text-gray-600">
-                            <p class="mb-4">This Cookie Policy explains how Barakah Apps uses cookies and similar technologies.</p>
-                            <h3 class="text-xl font-bold text-gray-900 mt-6 mb-3">What are cookies?</h3>
-                            <p class="mb-4">Cookies are small text files that are stored on your device when you visit a website. They help the website function properly and improve your user experience.</p>
-                            <h3 class="text-xl font-bold text-gray-900 mt-6 mb-3">How we use cookies</h3>
-                            <ul class="list-disc pl-5 space-y-2 mb-4">
-                                <li><strong>Essential Cookies:</strong> Necessary for the website to function.</li>
-                                <li><strong>Analytics Cookies:</strong> Help us understand how visitors interact with our website (e.g., Google Analytics).</li>
-                            </ul>
-                        </div>
-                    </div>
-                </section>
-            `,
-            terms: `
-                <section class="py-20 bg-white fade-in">
-                    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <h1 class="text-3xl font-bold text-gray-900 mb-8">Terms of Use</h1>
-                        <div class="prose prose-emerald max-w-none text-gray-600">
-                            <p>By downloading or using our apps, these terms will automatically apply to you. You should make sure therefore that you read them carefully before using our apps.</p>
-                            <p class="mt-4">You are not allowed to copy, or modify the app, any part of the app, or our trademarks in any way. The app itself, and all the trade marks, copyright, database rights and other intellectual property rights related to it, still belong to Barakah Apps.</p>
-                        </div>
-                    </div>
-                </section>
-            `,
-            contact: `
-                <section class="py-20 bg-gray-50 fade-in">
-                    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="bg-white rounded-2xl shadow-sm p-8 md:p-12">
-                            <div class="text-center mb-10">
-                                <h1 class="text-3xl font-bold text-gray-900 mb-4">Contact Us</h1>
-                                <p class="text-gray-600">Have a question about our apps or need support? Fill out the form below.</p>
-                            </div>
-                            
-                            <form onsubmit="handleFormSubmit(event)" class="space-y-6">
-                                <div class="grid md:grid-cols-2 gap-6">
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Name</label>
-                                        <input type="text" required class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                                        <input type="email" required class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition">
-                                    </div>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Subject</label>
-                                    <select class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition">
-                                        <option>General Inquiry</option>
-                                        <option>App Support</option>
-                                        <option>Custom Development</option>
-                                        <option>Privacy Concern</option>
-                                    </select>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Message</label>
-                                    <textarea rows="5" required class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"></textarea>
-                                </div>
-                                
-                                <button type="submit" class="w-full bg-emerald-600 text-white font-bold py-4 rounded-lg hover:bg-emerald-700 transition transform active:scale-95">
-                                    Send Message
-                                </button>
-                            </form>
-                        </div>
-                        
-                        <div class="mt-12 grid md:grid-cols-3 gap-6 text-center">
-                            <div>
-                                <i class="fas fa-envelope text-emerald-600 text-2xl mb-2"></i>
-                                <p class="text-gray-600">support@barakahapps.com</p>
-                            </div>
-                            <div>
-                                <i class="fas fa-map-marker-alt text-emerald-600 text-2xl mb-2"></i>
-                                <p class="text-gray-600">Global (Remote)</p>
-                            </div>
-                            <div>
-                                <i class="fas fa-clock text-emerald-600 text-2xl mb-2"></i>
-                                <p class="text-gray-600">Mon-Fri, 9am - 5pm</p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            `
+        // ==========================================
+        // 🔧 CONFIGURATION (PRESERVED)
+        // ==========================================
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyDWJ5qVnsA3rWvfkc0-_cIyfwLHEZNMuxE",
+            authDomain: "wayfinder-app-a2565.firebaseapp.com",
+            projectId: "wayfinder-app-a2565",
+            storageBucket: "wayfinder-app-a2565.firebasestorage.app",
+            messagingSenderId: "770872636942",
+            appId: "1:770872636942:web:f342a0d96de313a19a6e5f",
+            measurementId: "G-W7BXXBPLGX"
         };
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            // Load Home by default
-            navigateTo('home');
-            
-            // Set Year
-            document.getElementById('year').textContent = new Date().getFullYear();
-            
-            // Set Date for Privacy Policy dynamically when loaded
-            const dateElement = document.getElementById('date-display');
-            if(dateElement) dateElement.textContent = new Date().toLocaleDateString();
-        });
+        const STRIPE_LINK = "https://buy.stripe.com/test_fZu9AM0qE2GDbFZbN8asg00";
 
-        // Navigation Logic
-        function navigateTo(pageId, anchorId = null) {
-            const mainContent = document.getElementById('main-content');
+        // ==========================================
+        // 🔥 END CONFIGURATION
+        // ==========================================
+
+        // Initialize Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+        } catch(e) {
+            console.warn("Firebase Config Error", e);
+        }
+
+        // --- AUTH STATE LISTENER ---
+        if (typeof firebase !== 'undefined') {
+            firebase.auth().onAuthStateChanged((user) => {
+                if (user) {
+                    handleUserLoggedIn(user);
+                } else {
+                    handleUserLoggedOut();
+                }
+            });
+        }
+
+        function handleUserLoggedIn(user) {
+            const navCta = document.getElementById('nav-cta');
+            const navProfile = document.getElementById('nav-profile');
             
-            if (pages[pageId]) {
-                mainContent.innerHTML = pages[pageId];
-                window.scrollTo(0, 0);
+            navCta.classList.add('hidden');
+            navProfile.classList.remove('hidden');
+            navProfile.classList.add('flex');
+            
+            document.getElementById('nav-avatar').src = user.photoURL;
+            document.getElementById('nav-name').innerText = user.displayName.split(' ')[0]; // First name only
+            
+            const pricingCta = document.getElementById('pricing-cta');
+            pricingCta.innerText = "Proceed to Activation";
+            pricingCta.onclick = function() { openModal('payment-modal'); };
+
+            // Check URL for Payment Success
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('payment') === 'success') {
+                localStorage.setItem('wayfinder_pro_status', 'active');
+                navigateToDashboard();
+            }
+            
+            // Check Local Storage
+            if (localStorage.getItem('wayfinder_pro_status') === 'active') {
+                navCta.classList.remove('hidden');
+                navProfile.classList.add('hidden');
+                navProfile.classList.remove('flex');
                 
-                // Update Date if Privacy Page
-                if(pageId === 'privacy') {
-                    const dateElement = document.getElementById('date-display');
-                    if(dateElement) dateElement.textContent = new Date().toLocaleDateString();
-                }
-
-                // Handle Anchor
-                if (anchorId) {
-                    setTimeout(() => {
-                        const element = document.getElementById(anchorId);
-                        if (element) {
-                            element.scrollIntoView({ behavior: 'smooth' });
-                        }
-                    }, 100);
-                }
+                navCta.innerHTML = '<span class="relative z-10">Open Dashboard</span>';
+                navCta.onclick = function() { navigateToDashboard(); };
+                
+                pricingCta.innerText = "Open Dashboard";
+                pricingCta.onclick = function() { navigateToDashboard(); };
             }
         }
 
-        // Mobile Menu Toggle
-        function toggleMobileMenu() {
-            const menu = document.getElementById('mobile-menu');
-            menu.classList.toggle('hidden');
+        function handleUserLoggedOut() {
+            document.getElementById('nav-cta').classList.remove('hidden');
+            document.getElementById('nav-profile').classList.add('hidden');
+            document.getElementById('nav-profile').classList.remove('flex');
+            document.getElementById('nav-cta').innerHTML = '<span class="relative z-10">Get Started</span>';
         }
 
-        // Form Handling
-        function handleFormSubmit(event) {
-            event.preventDefault();
-            const btn = event.target.querySelector('button[type="submit"]');
-            const originalText = btn.innerText;
+        // --- ACTIONS ---
+
+        function handleRealGoogleLogin() {
+            const btn = document.querySelector('#login-modal button');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
             
-            btn.innerText = 'Message Sent!';
-            btn.classList.add('bg-green-700');
-            
-            // Reset form visual feedback after 3 seconds
-            setTimeout(() => {
-                event.target.reset();
-                btn.innerText = originalText;
-                btn.classList.remove('bg-green-700');
-            }, 3000);
-            
-            alert("Thank you for contacting Barakah Apps. We have received your message.");
+            const provider = new firebase.auth.GoogleAuthProvider();
+            firebase.auth().signInWithPopup(provider)
+                .then((result) => {
+                    closeModal('login-modal');
+                    if (localStorage.getItem('wayfinder_pro_status') !== 'active') {
+                        setTimeout(() => openModal('payment-modal'), 500);
+                    } else {
+                        navigateToDashboard();
+                    }
+                })
+                .catch((error) => {
+                    btn.innerHTML = originalContent;
+                    alert("Login Error: " + error.message);
+                });
+        }
+
+        function redirectToStripe() {
+            window.location.href = STRIPE_LINK;
+        }
+
+        function logout() {
+            firebase.auth().signOut().then(() => {
+                localStorage.removeItem('wayfinder_pro_status');
+                window.location.reload();
+            });
+        }
+
+        // --- UI HELPERS ---
+        function navigateToDashboard() {
+            try {
+                window.location.href = 'index.html';
+            } catch (e) {
+                alert("Redirecting to Dashboard...");
+            }
+        }
+
+        function openLogin() {
+            if (firebase.auth().currentUser && localStorage.getItem('wayfinder_pro_status') === 'active') {
+                navigateToDashboard();
+                return;
+            }
+            openModal('login-modal');
+        }
+
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            modal.classList.remove('hidden');
+            void modal.offsetWidth; // Trigger reflow
+            modal.classList.remove('opacity-0');
+            modal.firstElementChild.classList.remove('scale-95');
+        }
+
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            modal.classList.add('opacity-0');
+            modal.firstElementChild.classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
+        }
+
+        function scrollToPricing() {
+            document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' });
         }
     </script>
 </body>
