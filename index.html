@@ -425,7 +425,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('payment') === 'success') {
                 localStorage.setItem('wayfinder_pro_status', 'active');
-                navigateToDashboard();
+                n();
             }
             
             // Check Local Storage
@@ -435,10 +435,10 @@
                 navProfile.classList.remove('flex');
                 
                 navCta.innerHTML = '<span class="relative z-10">Open Dashboard</span>';
-                navCta.onclick = function() { navigateToDashboard(); };
+                navCta.onclick = function() { n(); };
                 
                 pricingCta.innerText = "Open Dashboard";
-                pricingCta.onclick = function() { navigateToDashboard(); };
+                pricingCta.onclick = function() { n(); };
             }
         }
 
@@ -486,7 +486,7 @@
         // --- UI HELPERS ---
         function navigateToDashboard() {
             try {
-                window.location.href = 'index.html';
+                window.location.href = 'app.html';
             } catch (e) {
                 alert("Redirecting to Dashboard...");
             }
@@ -521,6 +521,7 @@
     </script>
 </body>
 </html>
+
 
 
 
