@@ -3,451 +3,674 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barakah Apps - Islamic Android Applications</title>
-    <!-- Tailwind CSS -->
+    <title>Wayfinder Studio Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Font Awesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     
+    <!-- FIREBASE SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            scroll-behavior: smooth;
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        
+        canvas { cursor: crosshair; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .nav-link.active {
-            color: #10B981; /* Emerald 500 */
-            font-weight: 600;
+        .tool-btn.active {
+            background-color: #3b82f6; /* Blue 500 */
+            color: white;
+            border-color: #2563eb;
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800 flex flex-col min-h-screen">
+<body class="h-screen flex flex-col bg-slate-100 text-slate-800 font-sans">
 
-    <!-- Navigation -->
-    <nav class="bg-white shadow-sm sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center cursor-pointer" onclick="navigateTo('home')">
-                    <i class="fa-solid fa-mosque text-emerald-600 text-2xl mr-2"></i>
-                    <span class="font-bold text-xl tracking-tight text-gray-900">Barakah Apps</span>
-                </div>
-                
-                <!-- Desktop Menu -->
-                <div class="hidden md:flex items-center space-x-8">
-                    <button onclick="navigateTo('home')" class="nav-link text-gray-600 hover:text-emerald-600 transition">Home</button>
-                    <button onclick="navigateTo('home', 'apps-section')" class="nav-link text-gray-600 hover:text-emerald-600 transition">Our Apps</button>
-                    <button onclick="navigateTo('custom-dev')" class="nav-link text-gray-600 hover:text-emerald-600 transition">Custom Dev</button>
-                    <button onclick="navigateTo('privacy')" class="nav-link text-gray-600 hover:text-emerald-600 transition">Privacy Policy</button>
-                    <button onclick="navigateTo('contact')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition shadow-sm">Contact Us</button>
-                </div>
+    <!-- Navbar -->
+    <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-3 flex justify-between items-center shadow-lg z-20">
+        <div class="flex items-center space-x-3">
+            <div class="bg-blue-600 p-2 rounded-lg">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 7m0 13V7m0 0L9.553 4.553A1 1 0 009 3.618v10.764"></path></svg>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-wide">Wayfinder Studio <span class="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full ml-1">Cloud Connected</span></h1>
+                <p class="text-xs text-slate-400">Digital Wayfinding System Manager</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center space-x-3">
+             <span id="save-status" class="text-xs text-slate-400 italic mr-2"></span>
+             <button onclick="saveToCloud()" class="flex items-center space-x-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded shadow-lg text-sm transition font-medium">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <span>Save to Cloud</span>
+            </button>
+            <button onclick="toggleDeployMenu()" class="flex items-center space-x-2 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded shadow-lg text-sm transition font-medium">
+                <i class="fas fa-qrcode"></i>
+                <span>Connect Device</span>
+            </button>
+        </div>
+    </div>
 
-                <!-- Mobile Menu Button -->
-                <div class="md:hidden flex items-center">
-                    <button onclick="toggleMobileMenu()" class="text-gray-600 hover:text-gray-900 focus:outline-none">
-                        <i class="fa-solid fa-bars text-2xl"></i>
+    <!-- Main Layout -->
+    <div class="flex flex-1 overflow-hidden relative">
+        
+        <!-- Left Sidebar: Tools & Properties -->
+        <div class="w-80 bg-white border-r border-slate-200 flex flex-col shadow-xl z-10">
+            
+            <!-- Toolbar Mode Selector -->
+            <div class="p-4 border-b border-slate-100 bg-slate-50">
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Tools</label>
+                <div class="grid grid-cols-4 gap-2">
+                    <button onclick="setMode('select')" id="btn-select" class="tool-btn p-2 rounded border border-slate-200 hover:bg-white bg-slate-100 flex flex-col items-center justify-center transition" title="Select (V)">
+                        <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
+                        <span class="text-[10px] font-medium">Select</span>
+                    </button>
+                    <button onclick="setMode('node')" id="btn-node" class="tool-btn p-2 rounded border border-slate-200 hover:bg-white bg-slate-100 flex flex-col items-center justify-center transition" title="Add Nodes (N)">
+                        <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <span class="text-[10px] font-medium">Node</span>
+                    </button>
+                    <button onclick="setMode('edge')" id="btn-edge" class="tool-btn p-2 rounded border border-slate-200 hover:bg-white bg-slate-100 flex flex-col items-center justify-center transition" title="Connect (C)">
+                        <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                        <span class="text-[10px] font-medium">Edge</span>
+                    </button>
+                    <button onclick="setMode('pan')" id="btn-pan" class="tool-btn p-2 rounded border border-slate-200 hover:bg-white bg-slate-100 flex flex-col items-center justify-center transition" title="Pan (Space)">
+                        <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                        <span class="text-[10px] font-medium">Pan</span>
                     </button>
                 </div>
             </div>
-        </div>
 
-        <!-- Mobile Menu Dropdown -->
-        <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-gray-100">
-            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-                <button onclick="navigateTo('home'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Home</button>
-                <button onclick="navigateTo('home', 'apps-section'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Our Apps</button>
-                <button onclick="navigateTo('custom-dev'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Custom Dev</button>
-                <button onclick="navigateTo('privacy'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Privacy Policy</button>
-                <button onclick="navigateTo('cookie'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Cookie Policy</button>
-                <button onclick="navigateTo('contact'); toggleMobileMenu()" class="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-emerald-50">Contact Us</button>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Main Content Area -->
-    <main id="main-content" class="flex-grow">
-        <!-- Content will be injected here by JavaScript -->
-    </main>
-
-    <!-- Footer -->
-    <footer class="bg-gray-900 text-white pt-12 pb-8">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-                <div class="col-span-1 md:col-span-1">
-                    <div class="flex items-center mb-4">
-                        <i class="fa-solid fa-mosque text-emerald-500 text-xl mr-2"></i>
-                        <span class="font-bold text-lg">Barakah Apps</span>
-                    </div>
-                    <p class="text-gray-400 text-sm">
-                        Creating beneficial digital experiences for the Ummah. Quality Android applications focusing on productivity and spirituality.
-                    </p>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Links</h3>
-                    <ul class="space-y-2">
-                        <li><button onclick="navigateTo('home')" class="text-gray-400 hover:text-white text-sm">Home</button></li>
-                        <li><button onclick="navigateTo('custom-dev')" class="text-gray-400 hover:text-white text-sm">Services</button></li>
-                        <li><button onclick="navigateTo('contact')" class="text-gray-400 hover:text-white text-sm">Contact</button></li>
-                    </ul>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Legal</h3>
-                    <ul class="space-y-2">
-                        <li><button onclick="navigateTo('privacy')" class="text-gray-400 hover:text-white text-sm">Privacy Policy</button></li>
-                        <li><button onclick="navigateTo('cookie')" class="text-gray-400 hover:text-white text-sm">Cookie Policy</button></li>
-                        <li><button onclick="navigateTo('terms')" class="text-gray-400 hover:text-white text-sm">Terms of Use</button></li>
-                    </ul>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Connect</h3>
-                    <div class="flex space-x-4">
-                        <a href="#" class="text-gray-400 hover:text-white"><i class="fab fa-google-play text-xl"></i></a>
-                        <a href="#" class="text-gray-400 hover:text-white"><i class="fab fa-twitter text-xl"></i></a>
-                        <a href="#" class="text-gray-400 hover:text-white"><i class="fab fa-instagram text-xl"></i></a>
-                        <a href="#" class="text-gray-400 hover:text-white"><i class="fas fa-envelope text-xl"></i></a>
-                    </div>
-                </div>
-            </div>
-            <div class="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400 text-sm">
-                &copy; <span id="year"></span> Barakah Apps. All rights reserved.
-            </div>
-        </div>
-    </footer>
-
-    <!-- JavaScript Application Logic -->
-    <script>
-        // Content Data
-        const pages = {
-            home: `
-                <!-- Hero Section -->
-                <section class="bg-emerald-900 text-white relative overflow-hidden">
-                    <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/arabesque.png')]"></div>
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 relative z-10">
-                        <div class="text-center max-w-3xl mx-auto">
-                            <h1 class="text-4xl md:text-5xl font-bold mb-6 tracking-tight">Digital Solutions for the Modern Muslim</h1>
-                            <p class="text-xl text-emerald-100 mb-8">We build beautiful, privacy-focused Android applications that add barakah to your daily digital life.</p>
-                            <div class="flex justify-center gap-4">
-                                <button onclick="navigateTo('home', 'apps-section')" class="bg-white text-emerald-900 px-8 py-3 rounded-lg font-semibold hover:bg-emerald-50 transition">View Apps</button>
-                                <button onclick="navigateTo('contact')" class="border border-emerald-300 text-emerald-100 px-8 py-3 rounded-lg font-semibold hover:bg-emerald-800 transition">Contact Us</button>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Apps Showcase -->
-                <section id="apps-section" class="py-20 bg-white">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="text-center mb-16">
-                            <h2 class="text-3xl font-bold text-gray-900 mb-4">Our Applications</h2>
-                            <p class="text-gray-600 max-w-2xl mx-auto">Discover our suite of apps designed to help you maintain your spiritual habits effortlessly.</p>
-                        </div>
-
-                        <div class="grid md:grid-cols-3 gap-8">
-                            <!-- App Card 1 -->
-                            <div class="bg-gray-50 rounded-2xl p-6 hover:shadow-lg transition duration-300 border border-gray-100 flex flex-col">
-                                <div class="h-16 w-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-6 text-emerald-600">
-                                    <i class="fa-solid fa-kaaba text-3xl"></i>
-                                </div>
-                                <h3 class="text-xl font-bold text-gray-900 mb-2">Barakah Journey</h3>
-                                <p class="text-gray-600 mb-6 flex-grow">A comprehensive daily tracker for prayers, adhkar, and fasting habits with beautiful insights.</p>
-                                <div class="mt-auto">
-                                    <a href="#" class="flex items-center justify-center w-full bg-gray-900 text-white py-2 rounded-lg hover:bg-gray-800 transition">
-                                        <i class="fab fa-google-play mr-2"></i> Get on Play Store
-                                    </a>
-                                </div>
-                            </div>
-
-                            <!-- App Card 2 -->
-                            <div class="bg-gray-50 rounded-2xl p-6 hover:shadow-lg transition duration-300 border border-gray-100 flex flex-col">
-                                <div class="h-16 w-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-6 text-emerald-600">
-                                    <i class="fa-solid fa-book-quran text-3xl"></i>
-                                </div>
-                                <h3 class="text-xl font-bold text-gray-900 mb-2">Easy Quran Reader</h3>
-                                <p class="text-gray-600 mb-6 flex-grow">Distraction-free Quran reading experience with large fonts and simple translations.</p>
-                                <div class="mt-auto">
-                                    <a href="#" class="flex items-center justify-center w-full bg-gray-900 text-white py-2 rounded-lg hover:bg-gray-800 transition">
-                                        <i class="fab fa-google-play mr-2"></i> Get on Play Store
-                                    </a>
-                                </div>
-                            </div>
-
-                            <!-- App Card 3 -->
-                            <div class="bg-gray-50 rounded-2xl p-6 hover:shadow-lg transition duration-300 border border-gray-100 flex flex-col">
-                                <div class="h-16 w-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-6 text-emerald-600">
-                                    <i class="fa-solid fa-hands-holding-circle text-3xl"></i>
-                                </div>
-                                <h3 class="text-xl font-bold text-gray-900 mb-2">Smart Zakat</h3>
-                                <p class="text-gray-600 mb-6 flex-grow">Calculate your Zakat easily with current gold/silver rates and asset management.</p>
-                                <div class="mt-auto">
-                                    <a href="#" class="flex items-center justify-center w-full bg-gray-900 text-white py-2 rounded-lg hover:bg-gray-800 transition">
-                                        <i class="fab fa-google-play mr-2"></i> Get on Play Store
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Why Choose Us -->
-                <section class="py-20 bg-gray-50">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="grid md:grid-cols-2 gap-12 items-center">
-                            <div>
-                                <h2 class="text-3xl font-bold text-gray-900 mb-6">Privacy & Purity First</h2>
-                                <div class="space-y-6">
-                                    <div class="flex items-start">
-                                        <div class="flex-shrink-0">
-                                            <i class="fa-solid fa-shield-halved text-emerald-600 text-xl mt-1"></i>
-                                        </div>
-                                        <div class="ml-4">
-                                            <h4 class="text-lg font-semibold text-gray-900">No Data Mining</h4>
-                                            <p class="text-gray-600">We respect your privacy. We don't sell user data to third parties.</p>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-start">
-                                        <div class="flex-shrink-0">
-                                            <i class="fa-solid fa-ban text-emerald-600 text-xl mt-1"></i>
-                                        </div>
-                                        <div class="ml-4">
-                                            <h4 class="text-lg font-semibold text-gray-900">Ad-Free Options</h4>
-                                            <p class="text-gray-600">Clean interfaces focused on the purpose of the app, not distraction.</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-                                <div class="text-center">
-                                    <i class="fa-brands fa-android text-6xl text-emerald-500 mb-4"></i>
-                                    <h3 class="text-2xl font-bold text-gray-900">Android Specialists</h3>
-                                    <p class="text-gray-600 mt-2">Native development ensuring high performance and battery efficiency.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            `,
-            'custom-dev': `
-                <section class="bg-emerald-900 text-white py-20">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                        <h1 class="text-4xl font-bold mb-4">Custom App Development</h1>
-                        <p class="text-xl text-emerald-100">Turn your idea into a reality with our expert team.</p>
-                    </div>
-                </section>
+            <div class="flex-1 overflow-y-auto p-4 space-y-6">
                 
-                <section class="py-20 bg-white fade-in">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="grid md:grid-cols-2 gap-16">
-                            <div>
-                                <h3 class="text-2xl font-bold text-gray-900 mb-6">Why Work With Us?</h3>
-                                <div class="space-y-8">
-                                    <div>
-                                        <div class="h-12 w-12 bg-emerald-100 rounded-lg flex items-center justify-center mb-4 text-emerald-600">
-                                            <i class="fa-solid fa-code text-xl"></i>
-                                        </div>
-                                        <h4 class="text-xl font-semibold mb-2">Clean Code Architecture</h4>
-                                        <p class="text-gray-600">Scalable, maintainable code that grows with your user base.</p>
-                                    </div>
-                                    <div>
-                                        <div class="h-12 w-12 bg-emerald-100 rounded-lg flex items-center justify-center mb-4 text-emerald-600">
-                                            <i class="fa-solid fa-paint-roller text-xl"></i>
-                                        </div>
-                                        <h4 class="text-xl font-semibold mb-2">Modern UI/UX</h4>
-                                        <p class="text-gray-600">Interfaces that users love to interact with, following Material Design 3 guidelines.</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="bg-gray-50 p-8 rounded-2xl border border-gray-100">
-                                <h3 class="text-2xl font-bold text-gray-900 mb-6">Start a Project</h3>
-                                <p class="text-gray-600 mb-8">Interested in building a custom app for your mosque, organization, or startup?</p>
-                                <button onclick="navigateTo('contact')" class="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition">Request Consultation</button>
-                            </div>
+                <!-- Upload Section -->
+                <div>
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Map Source</label>
+                    <div class="relative group">
+                        <input type="file" id="imageLoader" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                        <div class="border-2 border-dashed border-slate-300 rounded bg-slate-50 p-4 text-center group-hover:border-blue-400 group-hover:bg-blue-50 transition">
+                            <p class="text-sm text-slate-600 font-medium">Click to Upload Map</p>
+                            <p class="text-xs text-slate-400 mt-1">JPG, PNG, SVG</p>
                         </div>
                     </div>
-                </section>
-            `,
-            privacy: `
-                <section class="py-20 bg-white fade-in">
-                    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <h1 class="text-3xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
-                        <p class="text-gray-500 mb-8">Last updated: <span id="date-display"></span></p>
-                        
-                        <div class="prose prose-emerald max-w-none text-gray-600">
-                            <p class="mb-4">At <strong>Barakah Apps</strong>, we maintain a strict policy to ensure the privacy and security of your personal information. This Privacy Policy outlines the types of information we may collect and how it is used.</p>
-                            
-                            <h3 class="text-xl font-bold text-gray-900 mt-8 mb-4">1. Information Collection</h3>
-                            <p class="mb-4">We do not collect any personally identifiable information (PII) unless explicitly provided by you (e.g., through email support). Our apps may require permissions such as Location (for prayer times) or Storage (for downloading content), but this data remains on your device.</p>
-                            
-                            <h3 class="text-xl font-bold text-gray-900 mt-8 mb-4">2. Location Data</h3>
-                            <p class="mb-4">For applications requiring prayer times or Qibla direction, we access your precise location. This location data is processed locally on your device and is not transmitted to our servers.</p>
-                            
-                            <h3 class="text-xl font-bold text-gray-900 mt-8 mb-4">3. Third-Party Services</h3>
-                            <p class="mb-4">We may use third-party services like Google AdMob (for ads) or Firebase Analytics (for crash reporting). These services may collect anonymous identifiers to improve user experience.</p>
-                            
-                            <h3 class="text-xl font-bold text-gray-900 mt-8 mb-4">4. Contact Us</h3>
-                            <p class="mb-4">If you have any questions about this Privacy Policy, please contact us at support@barakahapps.com.</p>
+                </div>
+
+                <!-- Settings -->
+                <div>
+                     <label class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">View Settings</label>
+                     <div class="space-y-2">
+                        <label class="flex items-center space-x-2 text-sm text-slate-700 cursor-pointer">
+                            <input type="checkbox" id="chk-grid" onchange="toggleGrid()" class="rounded text-blue-600 focus:ring-blue-500">
+                            <span>Show Grid</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm text-slate-700 cursor-pointer">
+                            <input type="checkbox" id="chk-snap" onchange="toggleSnap()" class="rounded text-blue-600 focus:ring-blue-500">
+                            <span>Snap to Grid</span>
+                        </label>
+                        <label class="flex items-center space-x-2 text-sm text-slate-700 cursor-pointer">
+                            <input type="checkbox" id="chk-labels" checked onchange="draw()" class="rounded text-blue-600 focus:ring-blue-500">
+                            <span>Show Labels</span>
+                        </label>
+                     </div>
+                </div>
+
+                <!-- DYNAMIC PROPERTY PANEL -->
+                
+                <!-- 1. Node Properties -->
+                <div id="prop-panel-node" class="hidden bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden animate-fade-in">
+                    <div class="bg-blue-50 border-b border-blue-100 p-3 flex justify-between items-center">
+                        <h3 class="font-bold text-blue-800 text-sm">📍 Point Details</h3>
+                        <span class="text-[10px] bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded" id="prop-node-id">ID</span>
+                    </div>
+                    <div class="p-3 space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Name / Label</label>
+                            <input type="text" id="node-name" class="w-full border border-slate-300 p-2 text-sm rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="e.g. Starbucks">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Type</label>
+                            <select id="node-type" class="w-full border border-slate-300 p-2 text-sm rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                                <option value="walkable">Walkable Path</option>
+                                <option value="destination">Destination (Shop/Room)</option>
+                                <option value="kiosk">Kiosk Location (Start)</option>
+                                <option value="bathroom">Restroom</option>
+                                <option value="exit">Exit / Elevator</option>
+                                <option value="stairs">Stairs / Escalator</option>
+                                <option value="parking">Parking</option>
+                            </select>
+                        </div>
+                         <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Description</label>
+                            <textarea id="node-desc" rows="2" class="w-full border border-slate-300 p-2 text-sm rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Extra details..."></textarea>
+                        </div>
+                        <div class="pt-2 flex space-x-2">
+                             <button onclick="saveNodeDetails()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded transition">Update</button>
+                             <button onclick="deleteSelected()" class="flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded transition">Delete</button>
                         </div>
                     </div>
-                </section>
-            `,
-            cookie: `
-                <section class="py-20 bg-white fade-in">
-                    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <h1 class="text-3xl font-bold text-gray-900 mb-8">Cookie Policy</h1>
-                        <div class="prose prose-emerald max-w-none text-gray-600">
-                            <p class="mb-4">This Cookie Policy explains how Barakah Apps uses cookies and similar technologies.</p>
-                            <h3 class="text-xl font-bold text-gray-900 mt-6 mb-3">What are cookies?</h3>
-                            <p class="mb-4">Cookies are small text files that are stored on your device when you visit a website. They help the website function properly and improve your user experience.</p>
-                            <h3 class="text-xl font-bold text-gray-900 mt-6 mb-3">How we use cookies</h3>
-                            <ul class="list-disc pl-5 space-y-2 mb-4">
-                                <li><strong>Essential Cookies:</strong> Necessary for the website to function.</li>
-                                <li><strong>Analytics Cookies:</strong> Help us understand how visitors interact with our website (e.g., Google Analytics).</li>
-                            </ul>
+                </div>
+
+                <!-- 2. Edge Properties -->
+                <div id="prop-panel-edge" class="hidden bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden animate-fade-in">
+                    <div class="bg-indigo-50 border-b border-indigo-100 p-3">
+                        <h3 class="font-bold text-indigo-800 text-sm">🔗 Connection Details</h3>
+                    </div>
+                    <div class="p-3 space-y-3">
+                         <div class="flex items-center justify-between">
+                             <span class="text-xs text-slate-500">Distance</span>
+                             <span id="edge-dist-display" class="text-sm font-mono font-bold">0 px</span>
+                         </div>
+                         <div>
+                             <label class="block text-xs font-medium text-slate-500 mb-1">Weight / Difficulty</label>
+                             <input type="number" id="edge-weight" value="1" min="1" class="w-full border border-slate-300 p-2 text-sm rounded">
+                             <p class="text-[10px] text-slate-400 mt-1">Higher = harder to walk (e.g. stairs)</p>
+                         </div>
+                         <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="edge-accessible" class="rounded text-indigo-600">
+                            <label for="edge-accessible" class="text-sm text-slate-700">Wheelchair Accessible</label>
+                         </div>
+                         <div class="pt-2 flex space-x-2">
+                             <button onclick="saveEdgeDetails()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 rounded transition">Update</button>
+                             <button onclick="deleteSelected()" class="flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded transition">Delete</button>
                         </div>
                     </div>
-                </section>
-            `,
-            terms: `
-                <section class="py-20 bg-white fade-in">
-                    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <h1 class="text-3xl font-bold text-gray-900 mb-8">Terms of Use</h1>
-                        <div class="prose prose-emerald max-w-none text-gray-600">
-                            <p>By downloading or using our apps, these terms will automatically apply to you. You should make sure therefore that you read them carefully before using our apps.</p>
-                            <p class="mt-4">You are not allowed to copy, or modify the app, any part of the app, or our trademarks in any way. The app itself, and all the trade marks, copyright, database rights and other intellectual property rights related to it, still belong to Barakah Apps.</p>
-                        </div>
-                    </div>
-                </section>
-            `,
-            contact: `
-                <section class="py-20 bg-gray-50 fade-in">
-                    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="bg-white rounded-2xl shadow-sm p-8 md:p-12">
-                            <div class="text-center mb-10">
-                                <h1 class="text-3xl font-bold text-gray-900 mb-4">Contact Us</h1>
-                                <p class="text-gray-600">Have a question about our apps or need support? Fill out the form below.</p>
-                            </div>
-                            
-                            <form onsubmit="handleFormSubmit(event)" class="space-y-6">
-                                <div class="grid md:grid-cols-2 gap-6">
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Name</label>
-                                        <input type="text" required class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                                        <input type="email" required class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition">
-                                    </div>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Subject</label>
-                                    <select class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition">
-                                        <option>General Inquiry</option>
-                                        <option>App Support</option>
-                                        <option>Custom Development</option>
-                                        <option>Privacy Concern</option>
-                                    </select>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Message</label>
-                                    <textarea rows="5" required class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"></textarea>
-                                </div>
-                                
-                                <button type="submit" class="w-full bg-emerald-600 text-white font-bold py-4 rounded-lg hover:bg-emerald-700 transition transform active:scale-95">
-                                    Send Message
-                                </button>
-                            </form>
-                        </div>
-                        
-                        <div class="mt-12 grid md:grid-cols-3 gap-6 text-center">
-                            <div>
-                                <i class="fas fa-envelope text-emerald-600 text-2xl mb-2"></i>
-                                <p class="text-gray-600">support@barakahapps.com</p>
-                            </div>
-                            <div>
-                                <i class="fas fa-map-marker-alt text-emerald-600 text-2xl mb-2"></i>
-                                <p class="text-gray-600">Global (Remote)</p>
-                            </div>
-                            <div>
-                                <i class="fas fa-clock text-emerald-600 text-2xl mb-2"></i>
-                                <p class="text-gray-600">Mon-Fri, 9am - 5pm</p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            `
+                </div>
+
+            </div>
+
+            <!-- Stats Footer -->
+            <div class="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 grid grid-cols-2 gap-2">
+                <div>Nodes: <span id="stat-nodes" class="font-bold text-slate-700">0</span></div>
+                <div>Edges: <span id="stat-edges" class="font-bold text-slate-700">0</span></div>
+            </div>
+        </div>
+
+        <!-- Canvas Workspace -->
+        <div class="flex-1 bg-slate-200 relative overflow-hidden cursor-crosshair" id="canvas-container">
+            
+            <!-- Floating Controls -->
+            <div class="absolute bottom-6 right-6 flex flex-col space-y-2 z-20">
+                <div class="glass-panel p-1 rounded-lg shadow-lg flex flex-col space-y-1">
+                    <button onclick="handleZoom(1.1)" class="p-2 hover:bg-white rounded text-slate-600 transition" title="Zoom In">+</button>
+                    <button onclick="resetView()" class="p-2 hover:bg-white rounded text-slate-600 transition text-xs font-bold" title="Reset View">100%</button>
+                    <button onclick="handleZoom(0.9)" class="p-2 hover:bg-white rounded text-slate-600 transition" title="Zoom Out">-</button>
+                </div>
+                <div class="glass-panel p-1 rounded-lg shadow-lg">
+                    <button onclick="undo()" class="p-2 hover:bg-white rounded text-slate-600 w-full transition" title="Undo (Ctrl+Z)">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
+                    </button>
+                </div>
+                 <div class="glass-panel p-1 rounded-lg shadow-lg">
+                    <button onclick="clearAll()" class="p-2 hover:bg-red-50 text-red-500 rounded w-full transition" title="Clear All">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+            </div>
+
+            <canvas id="mapCanvas" class="bg-white shadow-2xl block"></canvas>
+            
+            <!-- Empty State Helper -->
+            <div id="empty-state" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div class="bg-white/80 backdrop-blur p-6 rounded-xl shadow-xl text-center">
+                    <div class="text-4xl mb-2">🗺️</div>
+                    <h2 class="text-lg font-bold text-slate-700">Ready to Start?</h2>
+                    <p class="text-sm text-slate-500">Upload a floor plan from the sidebar to begin.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DEPLOY / CONNECT MODAL -->
+    <div id="deploy-modal" class="hidden fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-96">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+                <i class="fas fa-satellite-dish text-green-500 mr-2"></i> Connect Device
+            </h2>
+            <p class="text-sm text-slate-500 mb-4">Generate a unique code to pair an Android Kiosk to this map.</p>
+            
+            <div id="code-display-area" class="hidden mb-6 text-center">
+                <div class="text-4xl font-mono font-bold text-slate-800 bg-slate-100 p-4 rounded-lg border-2 border-dashed border-slate-300 tracking-widest" id="generated-code">
+                    ---
+                </div>
+                <p class="text-xs text-orange-500 mt-2 font-medium">Valid for 10 minutes. Single use only.</p>
+            </div>
+
+            <button onclick="generatePairingCode()" id="btn-gen-code" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition">
+                Generate New Code
+            </button>
+            <button onclick="toggleDeployMenu()" class="w-full mt-2 text-slate-400 text-sm hover:text-slate-600">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 🔧 CONFIGURATION SECTION
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDWJ5qVnsA3rWvfkc0-_cIyfwLHEZNMuxE",
+            authDomain: "wayfinder-app-a2565.firebaseapp.com",
+            projectId: "wayfinder-app-a2565",
+            storageBucket: "wayfinder-app-a2565.firebasestorage.app",
+            messagingSenderId: "770872636942",
+            appId: "1:770872636942:web:f342a0d96de313a19a6e5f"
         };
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            // Load Home by default
-            navigateTo('home');
-            
-            // Set Year
-            document.getElementById('year').textContent = new Date().getFullYear();
-            
-            // Set Date for Privacy Policy dynamically when loaded
-            const dateElement = document.getElementById('date-display');
-            if(dateElement) dateElement.textContent = new Date().toLocaleDateString();
-        });
+        const IMGBB_API_KEY = "YOUR_IMGBB_API_KEY"; 
+        // ==========================================
 
-        // Navigation Logic
-        function navigateTo(pageId, anchorId = null) {
-            const mainContent = document.getElementById('main-content');
-            
-            if (pages[pageId]) {
-                mainContent.innerHTML = pages[pageId];
-                window.scrollTo(0, 0);
-                
-                // Update Date if Privacy Page
-                if(pageId === 'privacy') {
-                    const dateElement = document.getElementById('date-display');
-                    if(dateElement) dateElement.textContent = new Date().toLocaleDateString();
-                }
+        // Initialize Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+            var db = firebase.firestore();
+            console.log("Firebase initialized");
+        } catch(e) {
+            console.warn("Firebase config missing or error", e);
+        }
 
-                // Handle Anchor
-                if (anchorId) {
-                    setTimeout(() => {
-                        const element = document.getElementById(anchorId);
-                        if (element) {
-                            element.scrollIntoView({ behavior: 'smooth' });
-                        }
-                    }, 100);
-                }
+        // --- EDITOR LOGIC (Preserved from previous V2) ---
+        const CONFIG = {
+            gridSize: 40,
+            pointRadius: 6,
+            selectionColor: '#fbbf24', 
+            nodeColors: {
+                walkable: '#3b82f6', destination: '#10b981', kiosk: '#ef4444',
+                bathroom: '#8b5cf6', exit: '#f97316', stairs: '#ec4899', parking: '#64748b'
+            }
+        };
+
+        let img = new Image();
+        let nodes = [];
+        let edges = [];
+        let scale = 1;
+        let offset = { x: 0, y: 0 };
+        let isDragging = false;
+        let lastMouse = { x: 0, y: 0 };
+        let mode = 'select';
+        let selectedElement = null;
+        let tempEdgeStart = null;
+        let history = [];
+        let showGrid = false;
+        let snapToGrid = false;
+        let currentMapId = "map_" + Date.now(); // Temp ID for local session
+
+        const container = document.getElementById('canvas-container');
+        const canvas = document.getElementById('mapCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- INITIALIZATION ---
+        new ResizeObserver(() => { fitCanvasToContainer(); draw(); }).observe(container);
+
+        function fitCanvasToContainer() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+
+        // --- CLOUD SYNC & IMAGE UPLOAD LOGIC ---
+
+        function toggleDeployMenu() {
+            const modal = document.getElementById('deploy-modal');
+            modal.classList.toggle('hidden');
+            document.getElementById('code-display-area').classList.add('hidden');
+            document.getElementById('btn-gen-code').innerText = "Generate New Code";
+        }
+
+        async function uploadToImgBB(base64Image) {
+            const formData = new FormData();
+            // ImgBB expects the base64 string without the "data:image/..." prefix
+            const cleanBase64 = base64Image.split(',')[1];
+            formData.append('image', cleanBase64);
+
+            const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                return result.data.url;
+            } else {
+                throw new Error("ImgBB Upload Failed: " + (result.error ? result.error.message : 'Unknown error'));
             }
         }
 
-        // Mobile Menu Toggle
-        function toggleMobileMenu() {
-            const menu = document.getElementById('mobile-menu');
-            menu.classList.toggle('hidden');
+        async function saveToCloud() {
+            const btn = document.querySelector('button[onclick="saveToCloud()"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Processing...`;
+            
+            // 1. Check Image Source
+            let finalImageUrl = img.src;
+            
+            // If image is still raw Base64 (starts with data:), we must upload it first
+            if (finalImageUrl.startsWith('data:')) {
+                btn.innerHTML = `<i class="fas fa-cloud-upload-alt fa-bounce"></i> Uploading Image...`;
+                try {
+                    if (IMGBB_API_KEY === "YOUR_IMGBB_API_KEY") {
+                        alert("Please configure your ImgBB API Key in the code first!");
+                        btn.innerHTML = originalText;
+                        return;
+                    }
+                    finalImageUrl = await uploadToImgBB(finalImageUrl);
+                    console.log("Image hosted at:", finalImageUrl);
+                    // Update the in-memory image source to the URL to prevent re-uploading next time
+                    img.src = finalImageUrl; 
+                } catch (err) {
+                    alert("Error uploading image: " + err.message);
+                    btn.innerHTML = originalText;
+                    return;
+                }
+            }
+
+            // 2. Prepare Data
+            const mapData = {
+                metadata: {
+                    version: "2.1",
+                    generated: new Date().toISOString(),
+                    mapImage: finalImageUrl // Now a clean URL
+                },
+                nodes: nodes,
+                edges: edges
+            };
+
+            // 3. Save to Firebase
+            try {
+                btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Saving Data...`;
+                await db.collection("maps").doc(currentMapId).set(mapData);
+                
+                document.getElementById('save-status').innerText = "Saved at " + new Date().toLocaleTimeString();
+                btn.innerHTML = `<i class="fas fa-check"></i> Saved`;
+                setTimeout(() => btn.innerHTML = originalText, 2000);
+            } catch (error) {
+                console.error("Error saving map: ", error);
+                alert("Error saving: " + error.message);
+                btn.innerHTML = originalText;
+            }
         }
 
-        // Form Handling
-        function handleFormSubmit(event) {
-            event.preventDefault();
-            const btn = event.target.querySelector('button[type="submit"]');
-            const originalText = btn.innerText;
-            
-            btn.innerText = 'Message Sent!';
-            btn.classList.add('bg-green-700');
-            
-            // Reset form visual feedback after 3 seconds
-            setTimeout(() => {
-                event.target.reset();
-                btn.innerText = originalText;
-                btn.classList.remove('bg-green-700');
-            }, 3000);
-            
-            alert("Thank you for contacting Barakah Apps. We have received your message.");
+        async function generatePairingCode() {
+            // 1. Ensure Map is saved first
+            await saveToCloud();
+
+            // 2. Generate random 6-char code
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase(); // e.g., 9X2B7A
+
+            // 3. Save code to Firestore 'pairing_codes'
+            try {
+                await db.collection("pairing_codes").doc(code).set({
+                    code: code,
+                    mapId: currentMapId,
+                    status: "waiting", // 'waiting', 'used'
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // 4. Show UI
+                document.getElementById('code-display-area').classList.remove('hidden');
+                document.getElementById('generated-code').innerText = code;
+                document.getElementById('btn-gen-code').innerText = "Regenerate";
+                
+            } catch (error) {
+                alert("Error generating code: " + error.message);
+            }
         }
+
+
+        // --- REST OF EDITOR LOGIC (Draw, Events, etc.) ---
+        
+        // Key Bindings
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === 'z' && (e.ctrlKey || e.metaKey)) undo();
+            if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
+            if (e.key === ' ') setMode('pan');
+            if (e.key === 'v') setMode('select');
+            if (e.key === 'n') setMode('node');
+            if (e.key === 'c') setMode('edge');
+        });
+
+        // History
+        function pushHistory() {
+            if (history.length > 20) history.shift();
+            history.push(JSON.stringify({ nodes, edges }));
+        }
+
+        function undo() {
+            if (history.length === 0) return;
+            const previous = JSON.parse(history.pop());
+            nodes = previous.nodes;
+            edges = previous.edges;
+            selectedElement = null;
+            tempEdgeStart = null;
+            updateUI();
+            draw();
+        }
+
+        function clearAll() {
+            if(confirm("Clear map?")) {
+                pushHistory();
+                nodes = []; edges = []; selectedElement = null; img.src = "";
+                document.getElementById('empty-state').classList.remove('hidden');
+                draw(); updateUI();
+            }
+        }
+
+        // Transforms
+        function toWorld(x, y) { return { x: (x - offset.x) / scale, y: (y - offset.y) / scale }; }
+        function toScreen(x, y) { return { x: (x * scale) + offset.x, y: (y * scale) + offset.y }; }
+        function applySnap(val) { return !snapToGrid ? val : Math.round(val / CONFIG.gridSize) * CONFIG.gridSize; }
+
+        // Interactions
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = -e.deltaY * 0.001;
+            const newScale = Math.min(Math.max(0.1, scale + delta), 5);
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const worldBefore = toWorld(mouseX, mouseY);
+            scale = newScale;
+            const worldAfter = toScreen(worldBefore.x, worldBefore.y);
+            offset.x += mouseX - worldAfter.x;
+            offset.y += mouseY - worldAfter.y;
+            draw();
+        });
+
+        container.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouse = { x: e.clientX, y: e.clientY };
+            const rect = canvas.getBoundingClientRect();
+            const worldPos = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+
+            if (mode === 'pan' || e.button === 1) { container.style.cursor = 'grabbing'; return; }
+
+            // Hit Test Nodes
+            const clickedNode = nodes.slice().reverse().find(n => Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < (CONFIG.pointRadius + 5) / scale + 5);
+            if (clickedNode) {
+                if (mode === 'edge') {
+                    if (!tempEdgeStart) tempEdgeStart = clickedNode.id;
+                    else if (tempEdgeStart !== clickedNode.id) {
+                        pushHistory();
+                        if (!edges.some(e => (e.from === tempEdgeStart && e.to === clickedNode.id) || (e.from === clickedNode.id && e.to === tempEdgeStart))) {
+                             edges.push({ id: Date.now().toString(), from: tempEdgeStart, to: clickedNode.id, weight: 1, accessible: true });
+                        }
+                        tempEdgeStart = null;
+                        updateStats();
+                    }
+                } else {
+                    selectElement('node', clickedNode.id);
+                }
+                draw(); return;
+            }
+
+            if (mode === 'node') {
+                pushHistory();
+                const id = Date.now().toString();
+                nodes.push({ id, x: applySnap(worldPos.x), y: applySnap(worldPos.y), type: 'walkable', name: '' });
+                selectElement('node', id);
+                updateStats(); draw();
+            } else {
+                selectedElement = null; tempEdgeStart = null; updateUI(); draw();
+            }
+        });
+
+        container.addEventListener('mousemove', (e) => {
+            const dx = e.clientX - lastMouse.x;
+            const dy = e.clientY - lastMouse.y;
+            lastMouse = { x: e.clientX, y: e.clientY };
+
+            if (isDragging) {
+                if (mode === 'pan' || e.buttons === 4) {
+                    offset.x += dx; offset.y += dy; draw();
+                } else if (mode === 'select' && selectedElement && selectedElement.type === 'node') {
+                    const node = nodes.find(n => n.id === selectedElement.id);
+                    if (node) {
+                        const worldPos = toWorld(e.clientX - container.getBoundingClientRect().left, e.clientY - container.getBoundingClientRect().top);
+                        node.x = applySnap(worldPos.x); node.y = applySnap(worldPos.y); draw();
+                    }
+                }
+            }
+        });
+
+        container.addEventListener('mouseup', () => { isDragging = false; container.style.cursor = mode === 'pan' ? 'grab' : 'crosshair'; });
+
+        // Draw
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(offset.x, offset.y);
+            ctx.scale(scale, scale);
+
+            if (img.src) ctx.drawImage(img, 0, 0);
+            if (showGrid) drawGrid();
+
+            edges.forEach(edge => {
+                const n1 = nodes.find(n => n.id === edge.from);
+                const n2 = nodes.find(n => n.id === edge.to);
+                if (n1 && n2) {
+                    ctx.beginPath(); ctx.moveTo(n1.x, n1.y); ctx.lineTo(n2.x, n2.y);
+                    const isSelected = selectedElement?.type === 'edge' && selectedElement.id === edge.id;
+                    ctx.lineWidth = isSelected ? 4 : 2;
+                    ctx.strokeStyle = isSelected ? CONFIG.selectionColor : '#94a3b8';
+                    if (!edge.accessible) ctx.setLineDash([5, 5]); else ctx.setLineDash([]);
+                    ctx.stroke();
+                }
+            });
+
+            if (mode === 'edge' && tempEdgeStart) {
+                const n1 = nodes.find(n => n.id === tempEdgeStart);
+                if(n1) { ctx.beginPath(); ctx.arc(n1.x, n1.y, CONFIG.pointRadius*1.5,0,Math.PI*2); ctx.strokeStyle=CONFIG.selectionColor; ctx.stroke();}
+            }
+
+            nodes.forEach(node => {
+                ctx.beginPath();
+                const isSelected = selectedElement?.type === 'node' && selectedElement.id === node.id;
+                ctx.arc(node.x, node.y, isSelected ? CONFIG.pointRadius*1.5 : CONFIG.pointRadius, 0, Math.PI * 2);
+                ctx.fillStyle = CONFIG.nodeColors[node.type] || CONFIG.nodeColors.walkable;
+                ctx.fill(); ctx.strokeStyle = isSelected ? CONFIG.selectionColor : 'white'; ctx.lineWidth = 1.5; ctx.stroke();
+                
+                if (node.name && document.getElementById('chk-labels').checked) {
+                    ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#1e293b'; ctx.textAlign = 'center'; ctx.fillText(node.name, node.x, node.y - 12);
+                }
+            });
+            ctx.restore();
+        }
+
+        function drawGrid() {
+            if (!img.src) return;
+            const w = img.width, h = img.height, step = CONFIG.gridSize;
+            ctx.beginPath(); ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)'; ctx.lineWidth = 1;
+            for (let x = 0; x <= w; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+            for (let y = 0; y <= h; y += step) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+            ctx.stroke();
+        }
+
+        // Image Load
+        document.getElementById('imageLoader').addEventListener('change', function(e) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                img.onload = function() {
+                    scale = 1; offset = {x:0, y:0};
+                    const containerAspect = container.clientWidth / container.clientHeight;
+                    const imgAspect = img.width / img.height;
+                    scale = (imgAspect > containerAspect) ? (container.clientWidth - 40) / img.width : (container.clientHeight - 40) / img.height;
+                    offset.x = (container.clientWidth - img.width * scale) / 2;
+                    offset.y = (container.clientHeight - img.height * scale) / 2;
+                    document.getElementById('empty-state').classList.add('hidden'); draw();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        });
+
+        // UI Helpers
+        function setMode(newMode) {
+            mode = newMode;
+            ['select', 'node', 'edge', 'pan'].forEach(m => {
+                const btn = document.getElementById('btn-' + m);
+                if (m === newMode) btn.classList.add('active', 'border-blue-500'); else btn.classList.remove('active', 'border-blue-500');
+            });
+            container.style.cursor = mode === 'pan' ? 'grab' : 'crosshair'; tempEdgeStart = null; draw();
+        }
+        function toggleGrid() { showGrid = document.getElementById('chk-grid').checked; draw(); }
+        function toggleSnap() { snapToGrid = document.getElementById('chk-snap').checked; }
+        function resetView() { scale = 1; offset = { x: 50, y: 50 }; draw(); }
+        function handleZoom(m) { scale *= m; draw(); }
+        function selectElement(type, id) { selectedElement = { type, id }; updateUI(); }
+        
+        function updateUI() {
+            const nodePanel = document.getElementById('prop-panel-node');
+            const edgePanel = document.getElementById('prop-panel-edge');
+            nodePanel.classList.add('hidden'); edgePanel.classList.add('hidden');
+            if (selectedElement?.type === 'node') {
+                const node = nodes.find(n => n.id === selectedElement.id);
+                if (node) {
+                    nodePanel.classList.remove('hidden');
+                    document.getElementById('prop-node-id').innerText = '#' + node.id.substr(-4);
+                    document.getElementById('node-name').value = node.name || '';
+                    document.getElementById('node-type').value = node.type;
+                    document.getElementById('node-desc').value = node.description || '';
+                }
+            } else if (selectedElement?.type === 'edge') {
+                const edge = edges.find(e => e.id === selectedElement.id);
+                if (edge) {
+                    edgePanel.classList.remove('hidden');
+                    const n1 = nodes.find(n => n.id === edge.from), n2 = nodes.find(n => n.id === edge.to);
+                    document.getElementById('edge-dist-display').innerText = Math.round(Math.hypot(n1.x - n2.x, n1.y - n2.y)) + ' px';
+                    document.getElementById('edge-weight').value = edge.weight || 1;
+                    document.getElementById('edge-accessible').checked = edge.accessible !== false;
+                }
+            }
+        }
+        function saveNodeDetails() {
+            if (selectedElement?.type !== 'node') return;
+            const node = nodes.find(n => n.id === selectedElement.id);
+            if (node) { pushHistory(); node.name = document.getElementById('node-name').value; node.type = document.getElementById('node-type').value; node.description = document.getElementById('node-desc').value; draw(); }
+        }
+        function saveEdgeDetails() {
+             if (selectedElement?.type !== 'edge') return;
+             const edge = edges.find(e => e.id === selectedElement.id);
+             if (edge) { pushHistory(); edge.weight = parseInt(document.getElementById('edge-weight').value); edge.accessible = document.getElementById('edge-accessible').checked; draw(); }
+        }
+        function deleteSelected() {
+            if (!selectedElement) return;
+            pushHistory();
+            if (selectedElement.type === 'node') {
+                nodes = nodes.filter(n => n.id !== selectedElement.id);
+                edges = edges.filter(e => e.from !== selectedElement.id && e.to !== selectedElement.id);
+            } else { edges = edges.filter(e => e.id !== selectedElement.id); }
+            selectedElement = null; updateUI(); updateStats(); draw();
+        }
+        function updateStats() {
+            document.getElementById('stat-nodes').innerText = nodes.length;
+            document.getElementById('stat-edges').innerText = edges.length;
+        }
+
+        setMode('select');
     </script>
 </body>
 </html>
