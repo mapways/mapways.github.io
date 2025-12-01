@@ -5,20 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Wayfinder Studio Enterprise</title>
     
-    <!-- React (UMD) - MOVED TO TOP FOR STABILITY -->
+    <!-- React (UMD) - MUST BE FIRST TO DEFINE GLOBAL 'React' and 'ReactDOM' -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS & Configuration -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
-    <!-- Babel (Runs JSX after React is defined) -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
     <script>
         tailwind.config = {
             theme: {
@@ -29,6 +21,13 @@
             }
         }
     </script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Babel (Needed to process JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <!-- FIREBASE V9 MODULES via ESM Shim -->
     <script type="importmap">
@@ -79,7 +78,6 @@
             
             // Critical: Listen for Auth State to trigger app rendering
             onAuthStateChanged(auth, (user) => {
-                // Dispatch event whether user is present or not, signaling auth is initialized
                 window.dispatchEvent(new CustomEvent('firebase-auth-initialized', { detail: user }));
             });
 
@@ -102,12 +100,19 @@
     </style>
 </head>
 <body>
-    <div id="root" class="h-screen w-screen flex flex-col"></div>
+    <div id="root" class="h-screen w-screen flex flex-col">
+        <!-- Fallback for slow loading -->
+        <div id="loading-fallback" class="h-full flex items-center justify-center text-slate-400">
+            <i class="fas fa-spinner fa-spin text-4xl"></i>
+            <span class="ml-3">Loading Studio...</span>
+        </div>
+    </div>
 
+    <!-- MAIN APPLICATION SCRIPT - MOVED TO END OF BODY -->
     <script type="text/babel" data-presets="react,typescript">
         const { useState, useRef, useEffect, useCallback } = React;
 
-        // --- AUTH HOOK (New) ---
+        // --- AUTH HOOK ---
         function useAuthStatus() {
             const [user, setUser] = useState(null);
             const [loading, setLoading] = useState(true);
@@ -119,12 +124,11 @@
                 };
                 window.addEventListener('firebase-auth-initialized', handleAuthInit);
                 
-                // Check if global auth object exists (for hot reload stability)
+                // Fallback for immediate auth status check
                 if (window.auth) {
                     const unsubscribe = window.auth.onAuthStateChanged((u) => {
                         setUser(u);
                         setLoading(false);
-                        // Clean up the manual listener if onAuthStateChanged is active
                         window.removeEventListener('firebase-auth-initialized', handleAuthInit);
                     });
                     return () => unsubscribe();
@@ -143,7 +147,7 @@
         };
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
-        // --- SERVICES ---
+        // --- SERVICES (Only database calls, helpers are local) ---
         async function uploadToImgBB(base64Image) {
             const formData = new FormData();
             const cleanBase64 = base64Image.split(',')[1];
@@ -156,34 +160,25 @@
         }
 
         async function deployToKiosk(mapData, mapId, userId) {
-            if (!window.db) throw new Error("Database not connected. Check internet connection.");
+            if (!window.db) throw new Error("Database not connected.");
 
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Database connection timed out. Check your Firestore Rules in Firebase Console.")), 8000)
+                setTimeout(() => reject(new Error("Database connection timed out.")), 8000)
             );
 
-            // 1. Save Map Data
+            // 1. Save Map Data (Collection: users/{userId}/maps/{mapId})
             const saveMapPromise = window.setDoc(window.doc(window.db, "users", userId, "maps", mapId), {
-                ...mapData,
-                ownerId: userId,
-                updatedAt: window.serverTimestamp()
+                ...mapData, ownerId: userId, updatedAt: window.serverTimestamp()
             });
             await Promise.race([saveMapPromise, timeoutPromise]);
             
-            // 2. Generate Pairing Code
+            // 2. Generate Pairing Code and Save (Collection: pairing_codes/{code})
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-            
-            // 3. Save Code
             const saveCodePromise = window.setDoc(window.doc(window.db, "pairing_codes", code), {
-                code: code,
-                mapId: mapId,
-                status: "waiting",
-                createdAt: window.serverTimestamp(),
-                ownerId: userId // Link the pairing code to the owner
+                code: code, mapId: mapId, status: "waiting", createdAt: window.serverTimestamp(), ownerId: userId
             });
 
             await Promise.race([saveCodePromise, timeoutPromise]);
-            
             return code;
         }
         
@@ -196,9 +191,7 @@
 
             // 1. Save Map Data (Update the existing document)
             const saveMapPromise = window.setDoc(window.doc(window.db, "users", userId, "maps", mapId), {
-                ...mapData,
-                ownerId: userId,
-                updatedAt: window.serverTimestamp()
+                ...mapData, ownerId: userId, updatedAt: window.serverTimestamp()
             });
 
             await Promise.race([saveMapPromise, timeoutPromise]);
@@ -230,7 +223,7 @@
                         <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl ${isLoading ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>
                             <Icon name={isLoading ? "spinner" : "check"} className={isLoading ? "fa-spin" : ""} />
                         </div>
-                        <h2 className="text-xl font-bold text-slate-800 mb-2">{isLoading ? 'Deploying...' : 'Connect Kiosk'}</h2>
+                        <h2 className="xl font-bold text-slate-800 mb-2">{isLoading ? 'Deploying...' : 'Connect Kiosk'}</h2>
                         {isLoading ? (
                             <p className="text-slate-500 text-sm">{progress}</p>
                         ) : (
@@ -258,12 +251,13 @@
                     if (!userId) return;
                     setLoading(true);
                     try {
+                        // Path: users/{userId}/maps
                         const mapsRef = window.collection(window.db, "users", userId, "maps");
                         const q = window.query(mapsRef, window.where("ownerId", "==", userId));
                         const snapshot = await window.getDocs(q);
                         const mapList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         setMaps(mapList);
-                    } catch (e) { console.error(e); }
+                    } catch (e) { console.error("Map Fetch Error:", e); }
                     setLoading(false);
                 };
                 fetchMaps();
@@ -340,7 +334,7 @@
                         const snapshot = await window.getDocs(q);
                         const deviceList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         setDevices(deviceList); 
-                    } catch (e) { console.error(e); }
+                    } catch (e) { console.error("Device Fetch Error:", e); }
                     setLoading(false);
                 };
                 fetchDevices();
@@ -400,7 +394,7 @@
             const userId = window.auth?.currentUser?.uid;
             
             // Core State (Linked to initialData if editing an old map)
-            const [mapId, setMapId] = useState(initialData?.id || `map_${generateId()}`);
+            const [mapId] = useState(initialData?.id || `map_${generateId()}`);
             const [mapName, setMapName] = useState(initialData?.metadata?.name || "Untitled Project");
             const [nodes, setNodes] = useState(initialData?.nodes || []);
             const [edges, setEdges] = useState(initialData?.edges || []);
@@ -547,6 +541,21 @@
                 dragRef.current = null;
             };
 
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if(file) {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        const img = new Image(); img.src = evt.target.result;
+                        img.onload = () => {
+                            imgRef.current = img; setMapImage(evt.target.result);
+                            setView({ scale: Math.min((containerRef.current.clientWidth-40)/img.width, (containerRef.current.clientHeight-40)/img.height), x: 20, y: 20 });
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
             const selectedElement = nodes.find(n => n.id === selectedId) || edges.find(e => e.id === selectedId);
 
 
@@ -590,7 +599,7 @@
 
                         <div className="flex-1 relative bg-slate-100 overflow-hidden cursor-pan" ref={containerRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={(e)=>{setView({...view, scale: Math.max(0.1, view.scale*(1-e.deltaY*0.001))})}}>
                             <canvas ref={canvasRef} className="block" />
-                            {!mapImage && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="bg-white/80 p-6 rounded-xl shadow-lg text-center backdrop-blur"><div className="4xl mb-2">🗺️</div><p className="text-slate-600 font-medium">Upload a map image to start</p></div></div>}
+                            {!mapImage && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="bg-white/80 p-6 rounded-xl shadow-lg text-center backdrop-blur"><div className="text-4xl mb-2">🗺️</div><p className="text-slate-600 font-medium">Upload a map image to start</p></div></div>}
                         </div>
 
                         <div className="w-72 bg-white border-l border-slate-200 flex flex-col shadow-xl">
@@ -626,11 +635,11 @@
                     <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icon name="lock" className="text-3xl" />
                     </div>
-                    <h2 className="2xl font-bold mb-2">Access Denied</h2>
+                    <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
                     <p className="text-slate-600 mb-6">You must be logged in via the landing page to access the studio dashboard.</p>
                     <button 
                         onClick={() => { 
-                            // Simulate returning to landing page
+                            // Simulate returning to landing page (assuming it's named index.html)
                             try { window.location.href = 'index.html'; } catch (e) { alert("Please log in on the main landing page first."); }
                         }}
                         className="w-full py-3 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700 transition"
@@ -653,6 +662,10 @@
             };
             
             if (loading) {
+                 // Remove the temporary loading fallback from the DOM once React starts
+                if (document.getElementById('loading-fallback')) {
+                    document.getElementById('loading-fallback').style.display = 'none';
+                }
                 return (
                     <div className="h-full flex items-center justify-center text-slate-500">
                         <Icon name="spinner" className="fa-spin text-4xl" />
@@ -661,6 +674,10 @@
             }
 
             if (!user) {
+                 // Remove the temporary loading fallback from the DOM once React starts
+                if (document.getElementById('loading-fallback')) {
+                    document.getElementById('loading-fallback').style.display = 'none';
+                }
                 return <LoginRequired />;
             }
             
@@ -669,7 +686,7 @@
                 <div className="flex h-full font-sans text-slate-800">
                     <div className="w-20 bg-slate-900 flex flex-col items-center py-6 gap-6 text-slate-400 z-50">
                         <div className="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-lg mb-4">W</div>
-                        <NavButton active={view === 'studio'} icon="pen-nib" label="Studio" onClick={() => { setView('studio'); setCurrentMapData(null); }} /> {/* Clear data when starting new studio */}
+                        <NavButton active={view === 'studio'} icon="pen-nib" label="Studio" onClick={() => { setView('studio'); setCurrentMapData(null); }} />
                         <NavButton active={view === 'maps'} icon="map" label="Maps" onClick={() => setView('maps')} />
                         <NavButton active={view === 'devices'} icon="tablet-alt" label="Devices" onClick={() => setView('devices')} />
                     </div>
