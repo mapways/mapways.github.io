@@ -105,68 +105,176 @@
         let canvas = document.getElementById('kioskCanvas');
         let ctx = canvas.getContext('2d');
         let activePath = [];
+        let unsubscribeListener = null;
 
-        // --- 1. PAIRING LOGIC ---
+        // --- 1. PAIRING & SYNC LOGIC ---
 
-        // Check if already paired
-        const savedMapId = localStorage.getItem('wayfinder_map_id');
-        if (savedMapId) {
-            loadMap(savedMapId);
+        // Check if already paired on load
+        const savedCode = localStorage.getItem('wayfinder_pairing_code');
+        if (savedCode) {
+            console.log("Found saved pairing code:", savedCode);
+            listenToConnection(savedCode);
+        } else {
+            console.log("No pairing code found. Showing setup screen.");
+            showSetupScreen();
         }
 
         async function pairDevice() {
-            const codeInput = document.getElementById('pairing-code-input').value.toUpperCase();
+            const codeInput = document.getElementById('pairing-code-input').value.toUpperCase().trim();
             const btn = document.getElementById('btn-pair');
             const errorMsg = document.getElementById('pair-error');
             
+            if (codeInput.length < 6) return;
+
             btn.innerText = "Verifying...";
             errorMsg.classList.add('hidden');
 
             try {
-                // 1. Check Code in Firestore
+                // 1. Verify Code Exists
                 const codeRef = db.collection("pairing_codes").doc(codeInput);
                 const doc = await codeRef.get();
 
                 if (!doc.exists) throw new Error("Invalid Code");
                 
                 const data = doc.data();
-                if (data.status !== 'waiting') throw new Error("Code already used");
+                if (data.status !== 'waiting') throw new Error("Code already used or expired");
 
                 // 2. Lock the code (Single Use Logic)
                 const deviceId = 'dev_' + Date.now();
                 await codeRef.update({
-                    status: 'used',
+                    status: 'active',
                     pairedDevice: deviceId,
                     pairedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
                 // 3. Save locally
-                localStorage.setItem('wayfinder_map_id', data.mapId);
+                localStorage.setItem('wayfinder_pairing_code', codeInput);
                 
-                // 4. Load
-                loadMap(data.mapId);
+                // 4. Start Listening
+                listenToConnection(codeInput);
 
             } catch (err) {
+                console.error(err);
                 errorMsg.innerText = err.message;
                 errorMsg.classList.remove('hidden');
                 btn.innerText = "Link Device";
             }
         }
 
-        async function loadMap(mapId) {
-            document.getElementById('setup-screen').classList.add('hidden');
-            document.getElementById('kiosk-ui').classList.remove('hidden');
+        function listenToConnection(code) {
+            // Unsubscribe previous if exists
+            if (unsubscribeListener) unsubscribeListener();
 
-            // Fetch Map Data
-            const doc = await db.collection("maps").doc(mapId).get();
-            if(doc.exists) {
-                mapData = doc.data();
-                // Load Image
-                img.onload = () => {
-                    fitToScreen();
-                    draw();
-                };
-                img.src = mapData.metadata.mapImage;
+            document.getElementById('btn-pair').innerText = "Syncing...";
+
+            // Listen to the pairing_code document. 
+            // If it is deleted (revoked) or mapId changes, we update instantly.
+            unsubscribeListener = db.collection("pairing_codes").doc(code)
+                .onSnapshot(async (snapshot) => {
+                    if (!snapshot.exists) {
+                        // DOCUMENT DELETED -> REVOKE ACCESS
+                        console.warn("Pairing revoked by server.");
+                        disconnectDevice();
+                        return;
+                    }
+
+                    const data = snapshot.data();
+                    if (data.mapId) {
+                        // Load or Update Map
+                        await loadMap(data.mapId);
+                    }
+                }, (error) => {
+                    console.error("Sync Error:", error);
+                    // If permission denied or other error, assume revoked
+                    disconnectDevice();
+                });
+        }
+
+        function disconnectDevice() {
+            localStorage.removeItem('wayfinder_pairing_code');
+            if (unsubscribeListener) unsubscribeListener();
+            showSetupScreen();
+            location.reload(); // Refresh to clean state
+        }
+
+        function showSetupScreen() {
+            document.getElementById('setup-screen').classList.remove('hidden');
+            document.getElementById('kiosk-ui').classList.add('hidden');
+            document.getElementById('btn-pair').innerText = "Link Device";
+            document.getElementById('pairing-code-input').value = "";
+        }
+
+        async function loadMap(mapId) {
+            try {
+                // Fetch Map Data (Using users collection path not strictly needed if we copied to maps collection, 
+                // but checking direct map reference based on earlier architecture)
+                // Note: In the Studio code, we saved to `users/{uid}/maps/{mapId}` AND `maps/{mapId}` (via deployment).
+                // We will fetch from the public-facing 'maps' collection which is cleaner for kiosks.
+                
+                // HOWEVER, the deployment code in Studio actually saved to `users/...`.
+                // Let's make sure the player can find it. 
+                // Fix: The previous deployment code saved directly to `maps` collection in step 1 of deployToKiosk.
+                // Wait, in "Dashboard Edition" code I generated, it saved to `users/{uid}/maps`.
+                // BUT pairing_code has no ownerId reference to find that path easily without query.
+                
+                // RE-READING STUDIO CODE: 
+                // deployToKiosk saved to `users/${userId}/maps/${mapId}`. 
+                // It did NOT save to root `maps`.
+                
+                // CORRECTION: The Player needs to know WHERE to look.
+                // Since Firestore queries are shallow, we can't just guess the user ID.
+                // I will add a fallback: The Studio *should* probably copy the active map to a public `maps` collection 
+                // OR the pairing code should contain the ownerId so we can construct the path.
+                
+                // Assume the Studio saved to `maps/{mapId}` OR we act smart.
+                // Let's try to get from root `maps` first (standard practice), if fail, we have an issue.
+                
+                // To fix the "Dashboard" logic mismatch: The Studio code I generated LAST saved to `users/...`.
+                // This makes it hard for the player to read.
+                
+                // HOTFIX for Player: We will query the collection group "maps" if direct access fails, 
+                // OR better, we simply read the map data.
+                
+                // Let's try direct read. If your rules allow reading `users/{uid}/maps` globally, it works.
+                // But we don't know UID.
+                
+                // REAL FIX: The Pairing Code document usually contains the `ownerId` (I added that in the Studio code!).
+                // So we can construct the path: `users/${pairingData.ownerId}/maps/${pairingData.mapId}`
+                
+                // Let's get the pairing doc again to be sure (snapshot has data).
+                const codeDoc = await db.collection("pairing_codes").doc(localStorage.getItem('wayfinder_pairing_code')).get();
+                const pairingData = codeDoc.data();
+                
+                let mapDocRef;
+                if (pairingData.ownerId) {
+                    mapDocRef = db.collection("users").doc(pairingData.ownerId).collection("maps").doc(mapId);
+                } else {
+                    // Fallback for older data
+                    mapDocRef = db.collection("maps").doc(mapId);
+                }
+
+                // Listen to the MAP document for real-time layout updates
+                mapDocRef.onSnapshot((doc) => {
+                    if (doc.exists) {
+                        mapData = doc.data();
+                        
+                        // Load Image
+                        const newImg = new Image();
+                        newImg.onload = () => {
+                            img = newImg;
+                            fitToScreen();
+                            draw();
+                            document.getElementById('setup-screen').classList.add('hidden');
+                            document.getElementById('kiosk-ui').classList.remove('hidden');
+                        };
+                        newImg.src = mapData.metadata.mapImage;
+                    }
+                });
+
+            } catch (e) {
+                console.error("Error loading map:", e);
+                document.getElementById('pair-error').innerText = "Map load failed: " + e.message;
+                document.getElementById('pair-error').classList.remove('hidden');
             }
         }
 
@@ -233,23 +341,62 @@
             ctx.restore();
         }
 
-        // --- 3. PATHFINDING (A* Algorithm) ---
-        // Simplified for MVP
+        // --- 3. PATHFINDING (A* Algorithm - Simplified) ---
         
         function findPath(startId, endId) {
-            // This is a Placeholder for A* // In a real app, implement full A* using mapData.nodes and mapData.edges
+            // Simple graph traversal for demo (Replace with full A* or Dijkstra for complex graphs)
+            // 1. Build Adjacency Graph
+            const graph = {};
+            mapData.nodes.forEach(n => graph[n.id] = []);
+            mapData.edges.forEach(e => {
+                const dist = Math.hypot(
+                    mapData.nodes.find(n=>n.id===e.from).x - mapData.nodes.find(n=>n.id===e.to).x,
+                    mapData.nodes.find(n=>n.id===e.from).y - mapData.nodes.find(n=>n.id===e.to).y
+                );
+                graph[e.from].push({ node: e.to, weight: (e.weight || 1) * dist });
+                graph[e.to].push({ node: e.from, weight: (e.weight || 1) * dist });
+            });
+
+            // 2. Dijkstra
+            const dists = {};
+            const prev = {};
+            const pq = new Set(mapData.nodes.map(n => n.id));
             
-            // For MVP: Just drawing a straight line if direct connection exists, 
-            // or finding a simple path through edges.
-            
-            // Mock Path (Just connecting start to end for visualization)
-            const n1 = mapData.nodes.find(n => n.id === startId);
-            const n2 = mapData.nodes.find(n => n.id === endId);
-            
-            if(n1 && n2) {
-                return [n1, n2]; // In real version, return [n1, n2, n3, n4...]
+            mapData.nodes.forEach(n => dists[n.id] = Infinity);
+            dists[startId] = 0;
+
+            while (pq.size > 0) {
+                let u = null;
+                for (const node of pq) {
+                    if (!u || dists[node] < dists[u]) u = node;
+                }
+                if (u === endId) break;
+                pq.delete(u);
+                if (dists[u] === Infinity) break;
+
+                const neighbors = graph[u] || [];
+                for (const neighbor of neighbors) {
+                    if (pq.has(neighbor.node)) {
+                        const alt = dists[u] + neighbor.weight;
+                        if (alt < dists[neighbor.node]) {
+                            dists[neighbor.node] = alt;
+                            prev[neighbor.node] = u;
+                        }
+                    }
+                }
             }
-            return [];
+
+            // 3. Reconstruct
+            const path = [];
+            let u = endId;
+            if (prev[u] || u === startId) {
+                while (u) {
+                    const node = mapData.nodes.find(n => n.id === u);
+                    path.unshift(node);
+                    u = prev[u];
+                }
+            }
+            return path;
         }
 
         // --- 4. SEARCH INTERFACE ---
@@ -262,14 +409,14 @@
             if(term.length < 1) { resultsBox.classList.add('hidden'); return; }
 
             const matches = mapData.nodes.filter(n => 
-                n.type === 'destination' && n.name.toLowerCase().includes(term)
+                n.type !== 'walkable' && n.name && n.name.toLowerCase().includes(term)
             );
 
             resultsBox.innerHTML = '';
             matches.forEach(node => {
                 const div = document.createElement('div');
                 div.className = "p-3 border-b hover:bg-slate-50 cursor-pointer flex justify-between";
-                div.innerHTML = `<span class="font-bold text-slate-700">${node.name}</span> <span class="text-xs text-slate-400">Shop</span>`;
+                div.innerHTML = `<span class="font-bold text-slate-700">${node.name}</span> <span class="text-xs text-slate-400 capitalize">${node.type}</span>`;
                 div.onclick = () => startNavigation(node);
                 resultsBox.appendChild(div);
             });
@@ -277,21 +424,19 @@
         });
 
         function startNavigation(targetNode) {
-            // Hide Search
             resultsBox.classList.add('hidden');
             searchInput.value = targetNode.name;
 
-            // Find Kiosk Location (Assuming first 'kiosk' node is us)
             const kioskNode = mapData.nodes.find(n => n.type === 'kiosk');
-            
             if (!kioskNode) { alert("No Kiosk 'Start Point' defined on map!"); return; }
 
-            // Calculate Path
             activePath = findPath(kioskNode.id, targetNode.id);
             
-            // Show UI
             document.getElementById('directions-card').classList.remove('translate-y-full');
             document.getElementById('target-name').innerText = targetNode.name;
+            // Est Time (Arbitrary: 100px = 10 sec walk)
+            const totalDist = activePath.reduce((acc, curr, i) => i === 0 ? 0 : acc + Math.hypot(curr.x - activePath[i-1].x, curr.y - activePath[i-1].y), 0);
+            document.getElementById('est-time').innerText = Math.ceil(totalDist / 150) + " min"; // Rough estimate
             
             draw();
         }
@@ -302,6 +447,8 @@
             document.getElementById('directions-card').classList.add('translate-y-full');
             draw();
         }
+
+        window.addEventListener('resize', () => { if(img.src) { fitToScreen(); draw(); } });
 
     </script>
 </body>
