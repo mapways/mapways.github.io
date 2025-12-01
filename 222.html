@@ -33,7 +33,8 @@
         {
             "imports": {
                 "firebase/app": "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js",
-                "firebase/firestore": "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js"
+                "firebase/firestore": "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js",
+                "firebase/auth": "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"
             }
         }
     </script>
@@ -41,6 +42,7 @@
     <script type="module">
         import { initializeApp } from "firebase/app";
         import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 
         // --- YOUR CONFIGURATION ---
         const firebaseConfig = {
@@ -53,15 +55,35 @@
             measurementId: "G-W7BXXBPLGX"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        try {
+            // Initialize Firebase
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+            const auth = getAuth(app);
 
-        // Expose to Window for React
-        window.db = db;
-        window.setDoc = setDoc;
-        window.doc = doc;
-        window.serverTimestamp = serverTimestamp;
-        window.IMGBB_API_KEY = "d3c464ab1b35134225f0bf7787c09d16";
+            // Expose to Window for React
+            window.db = db;
+            window.auth = auth;
+            window.setDoc = setDoc;
+            window.doc = doc;
+            window.serverTimestamp = serverTimestamp;
+            window.IMGBB_API_KEY = "d3c464ab1b35134225f0bf7787c09d16";
+
+            // Listen for Auth State (Silent)
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    console.log("✅ Authenticated");
+                }
+            });
+
+            // Attempt Sign In (Silent)
+            signInAnonymously(auth).catch((error) => {
+                console.warn("Auth Error (Check Console):", error.code);
+            });
+
+        } catch (err) {
+            console.error("Firebase Init Error", err);
+        }
     </script>
 
     <style>
@@ -89,7 +111,7 @@
         };
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
-        // --- SERVICES (Moved from your previous code) ---
+        // --- SERVICES ---
         
         async function uploadToImgBB(base64Image) {
             const formData = new FormData();
@@ -105,8 +127,15 @@
         }
 
         async function deployToKiosk(mapData, mapId) {
+            if (!window.db) throw new Error("Database not connected. Check internet connection.");
+            if (!window.auth?.currentUser) throw new Error("Not authenticated. Please refresh.");
+
             // 1. Save Map Data
-            await window.setDoc(window.doc(window.db, "maps", mapId), mapData);
+            await window.setDoc(window.doc(window.db, "maps", mapId), {
+                ...mapData,
+                ownerId: window.auth.currentUser.uid,
+                updatedAt: window.serverTimestamp()
+            });
             
             // 2. Generate Pairing Code
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -132,18 +161,18 @@
             </button>
         );
 
-        const DeployModal = ({ isOpen, onClose, code, isLoading }) => {
+        const DeployModal = ({ isOpen, onClose, code, isLoading, progress }) => {
             if (!isOpen) return null;
             return (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center backdrop-blur-sm animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl p-8 w-96 text-center">
-                        <div className="w-16 h-16 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
-                            <Icon name={isLoading ? "spinner" : "mobile-alt"} className={isLoading ? "fa-spin" : ""} />
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl ${isLoading ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>
+                            <Icon name={isLoading ? "spinner" : "check"} className={isLoading ? "fa-spin" : ""} />
                         </div>
                         <h2 className="text-xl font-bold text-slate-800 mb-2">{isLoading ? 'Deploying...' : 'Connect Kiosk'}</h2>
                         
                         {isLoading ? (
-                            <p className="text-slate-500 text-sm">Uploading assets and generating code...</p>
+                            <p className="text-slate-500 text-sm">{progress}</p>
                         ) : (
                             <>
                                 <p className="text-slate-500 text-sm mb-6">Enter this code on your Kiosk Player app to download this map.</p>
@@ -282,21 +311,23 @@
 
             const handleDeploy = async () => {
                 if(!mapImage) { alert("Please upload a map first."); return; }
+                
                 setIsDeploying(true);
                 setShowDeployModal(true);
-                setUploadProgress('Preparing...');
+                setDeployCode(null); // Reset code
+                setUploadProgress('Initializing...');
 
                 try {
                     let finalUrl = mapImage;
                     
                     // Check if local blob/base64, if so, upload to ImgBB
                     if (mapImage.startsWith('data:')) {
-                        setUploadProgress('Uploading Image...');
+                        setUploadProgress('Uploading Image to Cloud...');
                         finalUrl = await uploadToImgBB(mapImage);
                         setMapImage(finalUrl); // Update state to remote URL
                     }
 
-                    setUploadProgress('Generating Code...');
+                    setUploadProgress('Saving Database...');
                     const mapData = {
                         metadata: { version: "2.1", generated: new Date().toISOString(), mapImage: finalUrl },
                         nodes,
@@ -306,7 +337,8 @@
                     const code = await deployToKiosk(mapData, mapId);
                     setDeployCode(code);
                 } catch (err) {
-                    alert("Deployment Error: " + err.message);
+                    console.error(err);
+                    alert("Deployment Failed: " + err.message);
                     setShowDeployModal(false);
                 } finally {
                     setIsDeploying(false);
@@ -493,6 +525,7 @@
                         onClose={() => setShowDeployModal(false)} 
                         code={deployCode} 
                         isLoading={isDeploying} 
+                        progress={uploadProgress}
                     />
                 </div>
             );
