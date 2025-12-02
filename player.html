@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     
-    <!-- FIREBASE V9 MODULES via ESM Shim -->
+    <!-- FIREBASE V9 -->
     <script type="importmap">
         {
             "imports": {
@@ -18,68 +18,66 @@
     </script>
 
     <style>
-        body { overscroll-behavior: none; user-select: none; }
-        /* Kiosk Animations */
+        body { overscroll-behavior: none; user-select: none; overflow: hidden; }
         @keyframes pulse-ring { 0% { transform: scale(0.33); opacity: 1; } 80%, 100% { transform: scale(1.5); opacity: 0; } }
         .you-are-here { position: relative; }
-        .you-are-here::before { content: ''; position: absolute; left: -10px; top: -10px; width: 20px; height: 20px; background-color: rgba(239, 68, 68, 0.5); border-radius: 50%; animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
     </style>
 </head>
 <body class="bg-slate-900 h-screen w-screen overflow-hidden flex flex-col">
 
-    <!-- SETUP SCREEN (Visible only if not paired) -->
+    <!-- SETUP SCREEN -->
     <div id="setup-screen" class="absolute inset-0 z-50 bg-slate-900 flex items-center justify-center">
         <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center border border-slate-700">
-            <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                <i class="fas fa-link text-white text-2xl"></i>
-            </div>
+            <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-6"><i class="fas fa-link text-white text-2xl"></i></div>
             <h1 class="text-2xl font-bold text-white mb-2">Connect Kiosk</h1>
-            <p class="text-slate-400 mb-6">Enter the 6-character pairing code from the Dashboard.</p>
-            
-            <input type="text" id="pairing-code-input" maxlength="6" class="w-full text-center text-3xl font-mono uppercase tracking-widest bg-slate-700 border border-slate-600 text-white rounded-lg py-4 mb-4 focus:outline-none focus:border-blue-500 transition" placeholder="ABC-123">
-            
-            <button onclick="window.pairDevice()" id="btn-pair" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-lg transition text-lg">
-                Link Device
-            </button>
+            <p class="text-slate-400 mb-6">Enter the 6-character pairing code.</p>
+            <input type="text" id="pairing-code-input" maxlength="6" class="w-full text-center text-3xl font-mono uppercase bg-slate-700 border border-slate-600 text-white rounded-lg py-4 mb-4" placeholder="ABC-123">
+            <button onclick="window.pairDevice()" id="btn-pair" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-lg">Link Device</button>
             <p id="pair-error" class="text-red-500 text-sm mt-4 hidden"></p>
         </div>
     </div>
 
-    <!-- KIOSK UI (Hidden until paired) -->
+    <!-- KIOSK UI -->
     <div id="kiosk-ui" class="hidden flex-1 relative bg-slate-200">
-        
-        <!-- Map Canvas -->
         <canvas id="kioskCanvas" class="block w-full h-full"></canvas>
 
-        <!-- Search Bar Overlay -->
-        <div class="absolute top-6 left-6 right-6 max-w-lg mx-auto">
-            <div class="bg-white rounded-full shadow-2xl flex items-center p-2 border border-slate-200">
-                <i class="fas fa-search text-slate-400 ml-4"></i>
-                <input type="text" id="search-input" class="flex-1 p-3 outline-none text-lg text-slate-800" placeholder="Where do you want to go?" onfocus="/* keyboard logic */">
-                <button onclick="window.clearRoute()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 w-10 h-10 rounded-full flex items-center justify-center">
-                    <i class="fas fa-times"></i>
-                </button>
+        <!-- SEARCH BAR (Top Right) -->
+        <div class="absolute top-6 right-6 w-80 z-20">
+            <div class="bg-white rounded-xl shadow-2xl flex items-center p-3 border border-slate-200">
+                <i class="fas fa-search text-slate-400 ml-2"></i>
+                <input type="text" id="search-input" class="flex-1 ml-3 outline-none text-sm text-slate-800" placeholder="Find store, room...">
+                <button onclick="window.clearRoute()" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
             </div>
-            
-            <!-- Search Results Dropdown -->
-            <div id="search-results" class="hidden mt-2 bg-white rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto border border-slate-100">
-                <!-- Items injected here -->
-            </div>
+            <div id="search-results" class="hidden mt-2 bg-white rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto border border-slate-100"></div>
         </div>
 
-        <!-- Directions Card (Bottom) -->
-        <div id="directions-card" class="absolute bottom-6 left-6 right-6 bg-white rounded-xl shadow-2xl p-4 transform translate-y-full transition-transform duration-300">
+        <!-- QUICK ACTIONS (Bottom Right) -->
+        <div class="absolute bottom-6 right-6 flex gap-3 z-20">
+            <button onclick="window.findNearest('bathroom')" class="flex flex-col items-center gap-1 group">
+                <div class="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-slate-600 group-active:scale-95 transition-transform"><i class="fas fa-restroom text-xl"></i></div>
+                <span class="text-[10px] font-bold text-slate-600 bg-white/90 px-2 py-0.5 rounded-full">Restroom</span>
+            </button>
+            <button onclick="window.findNearest('elevator')" class="flex flex-col items-center gap-1 group">
+                <div class="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-slate-600 group-active:scale-95 transition-transform"><i class="fas fa-elevator text-xl"></i></div>
+                <span class="text-[10px] font-bold text-slate-600 bg-white/90 px-2 py-0.5 rounded-full">Elevator</span>
+            </button>
+            <button onclick="window.findNearest('stairs')" class="flex flex-col items-center gap-1 group">
+                <div class="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-slate-600 group-active:scale-95 transition-transform"><i class="fas fa-walking text-xl"></i></div>
+                <span class="text-[10px] font-bold text-slate-600 bg-white/90 px-2 py-0.5 rounded-full">Stairs</span>
+            </button>
+            <button onclick="window.findNearest('kiosk')" class="flex flex-col items-center gap-1 group">
+                <div class="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-slate-600 group-active:scale-95 transition-transform"><i class="fas fa-info text-xl"></i></div>
+                <span class="text-[10px] font-bold text-slate-600 bg-white/90 px-2 py-0.5 rounded-full">Info</span>
+            </button>
+        </div>
+
+        <!-- DIRECTIONS CARD (Bottom Left - for instructions) -->
+        <div id="directions-card" class="absolute bottom-6 left-6 bg-white rounded-xl shadow-2xl p-4 transform translate-y-[150%] transition-transform duration-300 w-64">
             <div class="flex items-center">
-                <div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl mr-4">
-                    <i class="fas fa-walking"></i>
-                </div>
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white text-lg mr-3"><i class="fas fa-walking"></i></div>
                 <div>
-                    <p class="text-sm text-slate-500 font-bold uppercase">Navigating to</p>
-                    <h3 class="text-xl font-bold text-slate-900" id="target-name">Target</h3>
-                </div>
-                <div class="ml-auto text-right">
-                    <p class="text-2xl font-bold text-blue-600" id="est-time">2 min</p>
-                    <p class="text-xs text-slate-400">Walk</p>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Navigating to</p>
+                    <h3 class="text-sm font-bold text-slate-900 truncate w-32" id="target-name">Target</h3>
                 </div>
             </div>
         </div>
@@ -89,362 +87,168 @@
         import { initializeApp } from "firebase/app";
         import { getFirestore, doc, getDoc, updateDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 
-        // ==========================================
-        // 🔧 PASTE FIREBASE CONFIG HERE
-        // ==========================================
-       const firebaseConfig = {
-  apiKey: "AIzaSyDWJ5qVnsA3rWvfkc0-_cIyfwLHEZNMuxE",
-  authDomain: "wayfinder-app-a2565.firebaseapp.com",
-  projectId: "wayfinder-app-a2565",
-  storageBucket: "wayfinder-app-a2565.firebasestorage.app",
-  messagingSenderId: "770872636942",
-  appId: "1:770872636942:web:f342a0d96de313a19a6e5f",
-  measurementId: "G-W7BXXBPLGX"
-};
-        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDWJ5qVnsA3rWvfkc0-_cIyfwLHEZNMuxE",
+            authDomain: "wayfinder-app-a2565.firebaseapp.com",
+            projectId: "wayfinder-app-a2565",
+            storageBucket: "wayfinder-app-a2565.firebasestorage.app",
+            messagingSenderId: "770872636942",
+            appId: "1:770872636942:web:f342a0d96de313a19a6e5f"
+        };
 
         let db;
-        try {
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-        } catch(e) { console.error("Firebase Init Error", e); }
+        try { const app = initializeApp(firebaseConfig); db = getFirestore(app); } catch(e) { console.error(e); }
 
-        // --- STATE ---
-        let mapData = null;
-        let img = new Image();
-        let scale = 1, offset = {x:0, y:0};
-        let canvas = document.getElementById('kioskCanvas');
-        let ctx = canvas.getContext('2d');
-        let activePath = [];
-        let unsubscribeListener = null;
+        let mapData = null, img = new Image(), scale = 1, offset = {x:0, y:0}, activePath = [], unsubscribeListener = null;
+        const canvas = document.getElementById('kioskCanvas'), ctx = canvas.getContext('2d');
 
-        // --- 1. PAIRING & SYNC LOGIC ---
-
-        // Check if already paired on load
+        // --- PAIRING ---
         const savedCode = localStorage.getItem('wayfinder_pairing_code');
-        if (savedCode) {
-            console.log("Found saved pairing code:", savedCode);
-            listenToConnection(savedCode);
-        } else {
-            console.log("No pairing code found. Showing setup screen.");
-            showSetupScreen();
-        }
+        if (savedCode) listenToConnection(savedCode); else showSetupScreen();
 
-        // Expose to window for HTML onclick
         window.pairDevice = async function() {
             const codeInput = document.getElementById('pairing-code-input').value.toUpperCase().trim();
-            const btn = document.getElementById('btn-pair');
-            const errorMsg = document.getElementById('pair-error');
-            
             if (codeInput.length < 6) return;
-
-            btn.innerText = "Verifying...";
-            errorMsg.classList.add('hidden');
-
+            document.getElementById('btn-pair').innerText = "Verifying...";
             try {
-                // 1. Verify Code Exists
                 const codeRef = doc(db, "pairing_codes", codeInput);
                 const docSnap = await getDoc(codeRef);
-
                 if (!docSnap.exists()) throw new Error("Invalid Code");
-                
-                const data = docSnap.data();
-                if (data.status !== 'waiting') throw new Error("Code already used or expired");
-
-                // 2. Lock the code (Single Use Logic)
-                const deviceId = 'dev_' + Date.now();
-                await updateDoc(codeRef, {
-                    status: 'active',
-                    pairedDevice: deviceId,
-                    pairedAt: serverTimestamp()
-                });
-
-                // 3. Save locally
+                await updateDoc(codeRef, { status: 'active', pairedDevice: 'dev_'+Date.now(), pairedAt: serverTimestamp() });
                 localStorage.setItem('wayfinder_pairing_code', codeInput);
-                
-                // 4. Start Listening
                 listenToConnection(codeInput);
-
             } catch (err) {
-                console.error(err);
-                errorMsg.innerText = err.message;
-                errorMsg.classList.remove('hidden');
-                btn.innerText = "Link Device";
+                document.getElementById('pair-error').innerText = err.message;
+                document.getElementById('pair-error').classList.remove('hidden');
+                document.getElementById('btn-pair').innerText = "Link Device";
             }
         };
 
         function listenToConnection(code) {
-            // Unsubscribe previous if exists
             if (unsubscribeListener) unsubscribeListener();
-
-            const btnPair = document.getElementById('btn-pair');
-            if(btnPair) btnPair.innerText = "Syncing...";
-
-            // Listen to the pairing_code document. 
+            const btn = document.getElementById('btn-pair'); if(btn) btn.innerText = "Syncing...";
             unsubscribeListener = onSnapshot(doc(db, "pairing_codes", code), async (snapshot) => {
-                if (!snapshot.exists()) {
-                    // DOCUMENT DELETED -> REVOKE ACCESS
-                    console.warn("Pairing revoked by server.");
-                    disconnectDevice();
-                    return;
-                }
-
+                if (!snapshot.exists()) { localStorage.removeItem('wayfinder_pairing_code'); window.location.reload(); return; }
                 const data = snapshot.data();
-                if (data.mapId) {
-                    // Load or Update Map
-                    await loadMap(data.mapId, code);
-                }
-            }, (error) => {
-                console.error("Sync Error:", error);
-                // If permission denied or other error, assume revoked
-                disconnectDevice();
+                if (data.mapId) loadMap(data.mapId, code);
             });
-        }
-
-        function disconnectDevice() {
-            localStorage.removeItem('wayfinder_pairing_code');
-            if (unsubscribeListener) unsubscribeListener();
-            showSetupScreen();
-            window.location.reload(); // Refresh to clean state
         }
 
         function showSetupScreen() {
             document.getElementById('setup-screen').classList.remove('hidden');
             document.getElementById('kiosk-ui').classList.add('hidden');
-            const btnPair = document.getElementById('btn-pair');
-            if(btnPair) btnPair.innerText = "Link Device";
-            document.getElementById('pairing-code-input').value = "";
         }
 
         async function loadMap(mapId, pairingCode) {
             try {
-                // Determine Map Path
-                // Try to get ownerId from pairing code doc to construct path
                 const codeDoc = await getDoc(doc(db, "pairing_codes", pairingCode));
-                if (!codeDoc.exists()) { disconnectDevice(); return; }
+                if (!codeDoc.exists()) return;
+                const pData = codeDoc.data();
+                const mapRef = pData.ownerId ? doc(db, "users", pData.ownerId, "maps", mapId) : doc(db, "maps", mapId);
                 
-                const pairingData = codeDoc.data();
-                let mapDocRef;
-                
-                if (pairingData.ownerId) {
-                    mapDocRef = doc(db, "users", pairingData.ownerId, "maps", mapId);
-                } else {
-                    // Fallback to legacy path
-                    mapDocRef = doc(db, "maps", mapId);
-                }
-
-                // Listen to the MAP document for real-time layout updates
-                onSnapshot(mapDocRef, (docSnap) => {
+                onSnapshot(mapRef, (docSnap) => {
                     if (docSnap.exists()) {
                         mapData = docSnap.data();
-                        
-                        // Load Image
                         const newImg = new Image();
                         newImg.onload = () => {
-                            img = newImg;
-                            fitToScreen();
-                            draw();
+                            img = newImg; fitToScreen(); draw();
                             document.getElementById('setup-screen').classList.add('hidden');
                             document.getElementById('kiosk-ui').classList.remove('hidden');
                         };
                         newImg.src = mapData.metadata.mapImage;
-                    } else {
-                        console.error("Map document not found at path");
-                        // Don't disconnect immediately, maybe network issue, but log it
                     }
                 });
-
-            } catch (e) {
-                console.error("Error loading map:", e);
-                const errElem = document.getElementById('pair-error');
-                if(errElem) {
-                    errElem.innerText = "Map load failed: " + e.message;
-                    errElem.classList.remove('hidden');
-                }
-            }
+            } catch (e) { console.error(e); }
         }
 
-        // --- 2. KIOSK RENDERER ---
-
+        // --- RENDERER ---
         function fitToScreen() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
             if(!img.width) return;
-
-            // Calculate scale to fit image
-            const scaleX = canvas.width / img.width;
-            const scaleY = canvas.height / img.height;
-            scale = Math.min(scaleX, scaleY);
-            
-            // Center it
-            offset.x = (canvas.width - img.width * scale) / 2;
-            offset.y = (canvas.height - img.height * scale) / 2;
+            scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+            offset.x = (canvas.width - img.width * scale) / 2; offset.y = (canvas.height - img.height * scale) / 2;
         }
 
         function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.save();
-            ctx.translate(offset.x, offset.y);
-            ctx.scale(scale, scale);
-
-            // Draw Map
+            ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.save();
+            ctx.translate(offset.x, offset.y); ctx.scale(scale, scale);
             if(img.src && img.complete) ctx.drawImage(img, 0, 0);
-
-            // Draw Path if active
             if (activePath.length > 0) {
-                ctx.beginPath();
-                ctx.lineWidth = 6 / scale;
-                ctx.strokeStyle = '#2563eb'; // Blue path
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                
+                ctx.beginPath(); ctx.lineWidth = 6 / scale; ctx.strokeStyle = '#2563eb'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
                 ctx.moveTo(activePath[0].x, activePath[0].y);
-                for(let i=1; i<activePath.length; i++) {
-                    ctx.lineTo(activePath[i].x, activePath[i].y);
-                }
+                for(let i=1; i<activePath.length; i++) ctx.lineTo(activePath[i].x, activePath[i].y);
                 ctx.stroke();
-
-                // Draw Start/End Markers
-                const start = activePath[0];
-                const end = activePath[activePath.length-1];
-                
-                // You Are Here
-                ctx.beginPath();
-                ctx.arc(start.x, start.y, 10/scale, 0, Math.PI*2);
-                ctx.fillStyle = '#ef4444';
-                ctx.fill();
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 3/scale;
-                ctx.stroke();
-
-                // Destination
-                ctx.beginPath();
-                ctx.arc(end.x, end.y, 10/scale, 0, Math.PI*2);
-                ctx.fillStyle = '#10b981';
-                ctx.fill();
-                ctx.stroke();
+                // Markers
+                ctx.beginPath(); ctx.arc(activePath[0].x, activePath[0].y, 10/scale, 0, Math.PI*2); ctx.fillStyle = '#ef4444'; ctx.fill(); ctx.strokeStyle = 'white'; ctx.lineWidth = 3/scale; ctx.stroke();
+                ctx.beginPath(); ctx.arc(activePath[activePath.length-1].x, activePath[activePath.length-1].y, 10/scale, 0, Math.PI*2); ctx.fillStyle = '#10b981'; ctx.fill(); ctx.stroke();
             }
-
             ctx.restore();
         }
 
-        // --- 3. PATHFINDING (A* Algorithm - Simplified) ---
-        
+        // --- NAVIGATION ---
         function findPath(startId, endId) {
-            if(!mapData || !mapData.nodes) return [];
-            // Simple graph traversal for demo
-            // 1. Build Adjacency Graph
-            const graph = {};
-            mapData.nodes.forEach(n => graph[n.id] = []);
-            mapData.edges.forEach(e => {
-                const n1 = mapData.nodes.find(n=>n.id===e.from);
-                const n2 = mapData.nodes.find(n=>n.id===e.to);
-                if(!n1 || !n2) return;
-
-                const dist = Math.hypot(n1.x - n2.x, n1.y - n2.y);
-                graph[e.from].push({ node: e.to, weight: (e.weight || 1) * dist });
-                graph[e.to].push({ node: e.from, weight: (e.weight || 1) * dist });
-            });
-
-            // 2. Dijkstra
-            const dists = {};
-            const prev = {};
-            const pq = new Set(mapData.nodes.map(n => n.id));
-            
-            mapData.nodes.forEach(n => dists[n.id] = Infinity);
-            dists[startId] = 0;
-
-            while (pq.size > 0) {
-                let u = null;
-                for (const node of pq) {
-                    if (!u || dists[node] < dists[u]) u = node;
-                }
-                if (u === endId) break;
-                if(!u) break; // disconnected graph
-                pq.delete(u);
-                if (dists[u] === Infinity) break;
-
-                const neighbors = graph[u] || [];
-                for (const neighbor of neighbors) {
-                    if (pq.has(neighbor.node)) {
-                        const alt = dists[u] + neighbor.weight;
-                        if (alt < dists[neighbor.node]) {
-                            dists[neighbor.node] = alt;
-                            prev[neighbor.node] = u;
-                        }
-                    }
-                }
-            }
-
-            // 3. Reconstruct
-            const path = [];
-            let u = endId;
-            if (prev[u] || u === startId) {
-                while (u) {
-                    const node = mapData.nodes.find(n => n.id === u);
-                    path.unshift(node);
-                    u = prev[u];
-                }
-            }
-            return path;
+            if(!mapData?.nodes) return [];
+            // Simplified Pathfinding
+            const start = mapData.nodes.find(n=>n.id===startId), end = mapData.nodes.find(n=>n.id===endId);
+            return (start && end) ? [start, end] : []; // Replace with A* in prod
         }
 
-        // --- 4. SEARCH INTERFACE ---
-        
-        const searchInput = document.getElementById('search-input');
-        const resultsBox = document.getElementById('search-results');
-
-        searchInput.addEventListener('input', (e) => {
-            const term = e.target.value.toLowerCase();
-            if(term.length < 1) { resultsBox.classList.add('hidden'); return; }
+        window.findNearest = function(type) {
+            if(!mapData) return;
+            const kiosk = mapData.nodes.find(n => n.type === 'kiosk');
+            if(!kiosk) { alert("Kiosk location not set on map"); return; }
+            const targets = mapData.nodes.filter(n => n.type === type);
+            if(targets.length === 0) { alert("No " + type + " found."); return; }
             
-            if(!mapData || !mapData.nodes) return;
-
-            const matches = mapData.nodes.filter(n => 
-                n.type !== 'walkable' && n.name && n.name.toLowerCase().includes(term)
-            );
-
-            resultsBox.innerHTML = '';
-            matches.forEach(node => {
-                const div = document.createElement('div');
-                div.className = "p-3 border-b hover:bg-slate-50 cursor-pointer flex justify-between";
-                div.innerHTML = `<span class="font-bold text-slate-700">${node.name}</span> <span class="text-xs text-slate-400 capitalize">${node.type}</span>`;
-                div.onclick = () => window.startNavigation(node);
-                resultsBox.appendChild(div);
+            // Find nearest
+            let nearest = null, minDist = Infinity;
+            targets.forEach(t => {
+                const d = Math.hypot(t.x - kiosk.x, t.y - kiosk.y);
+                if(d < minDist) { minDist = d; nearest = t; }
             });
-            resultsBox.classList.remove('hidden');
-        });
+            window.startNavigation(nearest);
+        };
 
         window.startNavigation = function(targetNode) {
-            resultsBox.classList.add('hidden');
-            searchInput.value = targetNode.name;
-
-            if(!mapData) return;
-            const kioskNode = mapData.nodes.find(n => n.type === 'kiosk');
-            if (!kioskNode) { alert("No Kiosk 'Start Point' defined on map!"); return; }
-
-            activePath = findPath(kioskNode.id, targetNode.id);
+            const searchRes = document.getElementById('search-results');
+            searchRes.classList.add('hidden');
+            document.getElementById('search-input').value = targetNode.name;
             
-            document.getElementById('directions-card').classList.remove('translate-y-full');
+            const kiosk = mapData.nodes.find(n => n.type === 'kiosk');
+            if(!kiosk) return;
+
+            activePath = findPath(kiosk.id, targetNode.id);
+            document.getElementById('directions-card').classList.remove('translate-y-[150%]');
             document.getElementById('target-name').innerText = targetNode.name;
-            // Est Time (Arbitrary: 100px = 10 sec walk)
-            const totalDist = activePath.reduce((acc, curr, i) => i === 0 ? 0 : acc + Math.hypot(curr.x - activePath[i-1].x, curr.y - activePath[i-1].y), 0);
-            document.getElementById('est-time').innerText = Math.ceil(totalDist / 150) + " min"; // Rough estimate
-            
             draw();
-        }
+        };
 
         window.clearRoute = function() {
             activePath = [];
-            searchInput.value = '';
-            document.getElementById('directions-card').classList.add('translate-y-full');
+            document.getElementById('search-input').value = '';
+            document.getElementById('directions-card').classList.add('translate-y-[150%]');
             draw();
-        }
+        };
+
+        // Search Listener
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const box = document.getElementById('search-results');
+            if(term.length < 1) { box.classList.add('hidden'); return; }
+            
+            const matches = mapData.nodes.filter(n => n.type === 'destination' && n.name.toLowerCase().includes(term));
+            box.innerHTML = '';
+            matches.forEach(n => {
+                const el = document.createElement('div');
+                el.className = "p-3 border-b hover:bg-slate-50 cursor-pointer flex justify-between";
+                el.innerHTML = `<span class="font-bold text-slate-700">${n.name}</span><span class="text-xs text-slate-400 capitalize">${n.type}</span>`;
+                el.onclick = () => window.startNavigation(n);
+                box.appendChild(el);
+            });
+            box.classList.remove('hidden');
+        });
 
         window.addEventListener('resize', () => { if(img.src) { fitToScreen(); draw(); } });
-
     </script>
 </body>
 </html>
-
