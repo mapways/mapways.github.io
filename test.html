@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wayfinder Studio Enterprise</title>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { brand: { 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' } }
+                }
+            }
+        }
+    </script>
+    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "firebase/app": "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js",
+                "firebase/firestore": "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js",
+                "firebase/auth": "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import { initializeApp } from "firebase/app";
+        import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, query, where, serverTimestamp } from "firebase/firestore";
+        import { getAuth, onAuthStateChanged } from "firebase/auth";
+
+        // --- FIREBASE CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDWJ5qVnsA3rWvfkc0-_cIyfwLHEZNMuxE",
+            authDomain: "wayfinder-app-a2565.firebaseapp.com",
+            projectId: "wayfinder-app-a2565",
+            storageBucket: "wayfinder-app-a2565.firebasestorage.app",
+            messagingSenderId: "770872636942",
+            appId: "1:770872636942:web:f342a0d96de313a19a6e5f"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            window.db = getFirestore(app);
+            window.auth = getAuth(app);
+            // Export methods to window for React to use
+            window.setDoc = setDoc; window.getDoc = getDoc; window.getDocs = getDocs; 
+            window.deleteDoc = deleteDoc; window.doc = doc; window.collection = collection; 
+            window.query = query; window.where = where; window.serverTimestamp = serverTimestamp;
+
+            onAuthStateChanged(window.auth, (user) => {
+                window.dispatchEvent(new CustomEvent('firebase-auth-initialized', { detail: user }));
+            });
+        } catch (err) { console.error("Firebase Init Error", err); }
+    </script>
+
+    <style>
+        body { background-color: #f1f5f9; overflow: hidden; }
+        .cursor-pan { cursor: grab; }
+        .cursor-panning { cursor: grabbing; }
+        .nav-item.active { background-color: #1e293b; color: #ffffff; border-right: 3px solid #3b82f6; }
+        /* Preview Animations */
+        @keyframes pulse-dot { 0% { transform: scale(0.9); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } 100% { transform: scale(0.9); opacity: 1; } }
+        .animate-pulse-dot { animation: pulse-dot 2s infinite; }
+    </style>
+</head>
+<body>
+    <div id="root" class="h-screen w-screen flex flex-col"></div>
+
+    <script type="text/babel" data-presets="react,typescript">
+        const { useState, useRef, useEffect, Component } = React;
+
+        // --- 0. UTILS & CONSTANTS ---
+        const ENV = { IMGBB_KEY: "d3c464ab1b35134225f0bf7787c09d16" };
+        const CONFIG = {
+            gridSize: 40, nodeRadius: 8, hitRadius: 15,
+            colors: { selection: '#2563eb', path: '#10b981', walkable: '#64748b', destination: '#ef4444', kiosk: '#f59e0b', bathroom: '#8b5cf6', elevator: '#06b6d4', stairs: '#ec4899', custom: '#888888' }
+        };
+        const UTILS = {
+            generateId: () => Math.random().toString(36).substr(2, 9),
+            sanitize: (str) => str ? str.replace(/[^\w\s\-\.\:\/]/gi, '') : '' 
+        };
+
+        // --- 1. SERVICES ---
+        async function uploadToImgBB(base64Image) {
+            const formData = new FormData();
+            formData.append('image', base64Image.split(',')[1]);
+            const res = await fetch(`https://api.imgbb.com/1/upload?key=${ENV.IMGBB_KEY}`, { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.success) return data.data.url;
+            throw new Error(data.error?.message || 'Upload failed');
+        }
+
+        async function deployToKiosk(mapData, mapId, userId) {
+            if (!window.db) throw new Error("Database not connected.");
+            await window.setDoc(window.doc(window.db, "users", userId, "maps", mapId), { ...mapData, ownerId: userId, updatedAt: window.serverTimestamp() });
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+            await window.setDoc(window.doc(window.db, "pairing_codes", code), { code, mapId, status: "waiting", createdAt: window.serverTimestamp(), ownerId: userId });
+            return code;
+        }
+
+        async function syncUpdates(mapData, mapId, userId) {
+             if (!window.db) throw new Error("Database not connected.");
+             await window.setDoc(window.doc(window.db, "users", userId, "maps", mapId), { ...mapData, ownerId: userId, updatedAt: window.serverTimestamp() });
+        }
+
+        // --- 2. COMMON COMPONENTS ---
+        const Icon = ({ name, className = '' }) => <i className={`fas fa-${name} ${className}`}></i>;
+        
+        class ErrorBoundary extends Component {
+            constructor(props) { super(props); this.state = { hasError: false }; }
+            static getDerivedStateFromError(error) { return { hasError: true }; }
+            componentDidCatch(error, errorInfo) { console.error("UI Crash:", error, errorInfo); }
+            render() { return this.state.hasError ? <div className="p-10 text-red-600">Something went wrong. Refresh to reset.</div> : this.props.children; }
+        }
+
+        // --- 3. SUB-COMPONENTS (DASHBOARD) ---
+        const NavButton = ({ active, icon, label, onClick }) => (
+            <button onClick={onClick} className={`w-full p-4 flex flex-col items-center justify-center transition-all ${active ? 'bg-slate-800 text-blue-400 border-r-4 border-blue-500' : 'text-slate-400 hover:bg-slate-800'}`}>
+                <Icon name={icon} className="text-xl mb-1" />
+                <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
+            </button>
+        );
+
+        const MapLibrary = ({ onEditMap, userId }) => {
+            const [maps, setMaps] = useState([]);
+            const [loading, setLoading] = useState(true);
+            
+            useEffect(() => {
+                const fetchMaps = async () => {
+                    if (!userId) return; 
+                    try {
+                        const q = window.query(window.collection(window.db, "users", userId, "maps"), window.where("ownerId", "==", userId));
+                        const snapshot = await window.getDocs(q);
+                        setMaps(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    } catch (e) { console.error(e); } setLoading(false);
+                }; fetchMaps();
+            }, [userId]);
+
+            const deleteMap = async (id) => {
+                if(!confirm("Are you sure?")) return;
+                try { await window.deleteDoc(window.doc(window.db, "users", userId, "maps", id)); setMaps(maps.filter(m => m.id !== id)); } catch(e) { alert(e.message); }
+            };
+
+            if(loading) return <div className="p-10 text-center"><Icon name="spinner" className="fa-spin text-2xl" /></div>;
+
+            return (
+                <div className="p-8 h-full overflow-y-auto bg-slate-50">
+                    <h1 className="text-2xl font-bold text-slate-800 mb-6">Map Library</h1>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {maps.map(map => (
+                            <div key={map.id} className="bg-white rounded-xl shadow-sm border overflow-hidden hover:shadow-md transition">
+                                <div className="h-40 bg-slate-100 relative group">
+                                    <img src={map.metadata?.mapImage || "https://placehold.co/400x200"} className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                                        <button onClick={() => onEditMap(map)} className="bg-white text-slate-900 px-4 py-2 rounded-full font-bold text-sm">Edit Map</button>
+                                    </div>
+                                </div>
+                                <div className="p-4 flex justify-between items-center">
+                                    <h3 className="font-bold truncate">{map.metadata?.name || "Untitled"}</h3>
+                                    <button onClick={() => deleteMap(map.id)} className="text-red-400 hover:text-red-600"><Icon name="trash" /></button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const DeviceManager = ({ userId }) => {
+            const [devices, setDevices] = useState([]);
+            useEffect(() => {
+                const fetchDevs = async () => {
+                    const q = window.query(window.collection(window.db, "pairing_codes"), window.where("ownerId", "==", userId));
+                    const snapshot = await window.getDocs(q);
+                    setDevices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); 
+                }; fetchDevs();
+            }, [userId]);
+
+            return (
+                <div className="p-8 h-full bg-slate-50">
+                    <h1 className="text-2xl font-bold text-slate-800 mb-6">Active Devices</h1>
+                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-5 text-slate-500 font-bold"><tr><th className="p-4">Code</th><th className="p-4">Map ID</th><th className="p-4">Status</th></tr></thead>
+                            <tbody>
+                                {devices.map(d => (
+                                    <tr key={d.id} className="border-t"><td className="p-4 font-mono text-blue-600 font-bold">{d.code}</td><td className="p-4 text-xs text-slate-500">{d.mapId}</td><td className="p-4"><span className={`px-2 py-1 rounded text-xs ${d.status==='active'?'bg-green-100 text-green-700':'bg-yellow-100 text-yellow-700'}`}>{d.status}</span></td></tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 4. EDITOR COMPONENT (With Interactions) ---
+        const Editor = ({ initialData, userId, onBack }) => {
+            const [mapId] = useState(initialData?.id || null);
+            const [mapName, setMapName] = useState(initialData?.metadata?.name || "Untitled Project");
+            const [nodes, setNodes] = useState(initialData?.nodes || []);
+            const [edges, setEdges] = useState(initialData?.edges || []);
+            const [mapImage, setMapImage] = useState(initialData?.metadata?.mapImage || null);
+            
+            // Editor State
+            const [view, setView] = useState({ scale: 1, x: 0, y: 0 });
+            const [toolMode, setToolMode] = useState('select');
+            const [selectedId, setSelectedId] = useState(null);
+            const [isWorking, setIsWorking] = useState(false);
+            const [previewMode, setPreviewMode] = useState(false);
+            
+            // Interactive State (Preview Only)
+            const [searchQuery, setSearchQuery] = useState('');
+            const [activePath, setActivePath] = useState([]);
+            
+            const canvasRef = useRef(null);
+            const containerRef = useRef(null);
+            const imgRef = useRef(null);
+            const dragRef = useRef(null);
+            const tempEdgeRef = useRef(null);
+            const needsRender = useRef(true);
+
+            useEffect(() => {
+                if (mapImage) {
+                    const img = new Image();
+                    img.src = mapImage;
+                    img.onload = () => { imgRef.current = img; needsRender.current = true; };
+                }
+            }, [mapImage]);
+
+            useEffect(() => { needsRender.current = true; }, [nodes, edges, view, selectedId, toolMode, activePath, previewMode]);
+
+            // --- NAVIGATION LOGIC ---
+            const findNearest = (type) => {
+                const kiosk = nodes.find(n => n.type === 'kiosk');
+                if (!kiosk) { alert("Please add a Kiosk node first."); return; }
+                const targets = nodes.filter(n => n.type === type);
+                if (targets.length === 0) { alert(`No ${type} found.`); return; }
+                
+                let nearest = null, minDist = Infinity;
+                targets.forEach(t => {
+                    const d = Math.hypot(t.x - kiosk.x, t.y - kiosk.y);
+                    if (d < minDist) { minDist = d; nearest = t; }
+                });
+                setActivePath([kiosk, nearest]);
+                needsRender.current = true;
+            };
+
+            const navigateTo = (node) => {
+                const kiosk = nodes.find(n => n.type === 'kiosk');
+                if (kiosk) setActivePath([kiosk, node]);
+                setSearchQuery('');
+                needsRender.current = true;
+            };
+
+            // --- RENDER LOOP ---
+            useEffect(() => {
+                const canvas = canvasRef.current, ctx = canvas.getContext('2d');
+                let animationFrameId;
+                const render = () => {
+                    if (needsRender.current) {
+                        canvas.width = containerRef.current?.clientWidth || 800; canvas.height = containerRef.current?.clientHeight || 600;
+                        ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save();
+                        ctx.translate(view.x, view.y); ctx.scale(view.scale, view.scale);
+                        
+                        if (imgRef.current) {
+                            ctx.drawImage(imgRef.current, 0, 0);
+                            if (!previewMode) {
+                                ctx.beginPath(); ctx.strokeStyle = 'rgba(0,0,0,0.05)'; ctx.lineWidth=1/view.scale;
+                                for(let x=0; x<=imgRef.current.width; x+=CONFIG.gridSize) { ctx.moveTo(x,0); ctx.lineTo(x,imgRef.current.height); }
+                                for(let y=0; y<=imgRef.current.height; y+=CONFIG.gridSize) { ctx.moveTo(0,y); ctx.lineTo(imgRef.current.width,y); }
+                                ctx.stroke();
+                            }
+                        }
+                        edges.forEach(e => {
+                            const n1 = nodes.find(n=>n.id===e.from), n2 = nodes.find(n=>n.id===e.to);
+                            if(n1 && n2) {
+                                ctx.beginPath(); ctx.moveTo(n1.x, n1.y); ctx.lineTo(n2.x, n2.y);
+                                ctx.strokeStyle = selectedId === e.id ? CONFIG.colors.selection : (previewMode ? 'rgba(148, 163, 184, 0.3)' : '#94a3b8');
+                                ctx.lineWidth = (selectedId === e.id ? 4 : 2) / view.scale; ctx.stroke();
+                            }
+                        });
+                        if (previewMode && activePath.length > 0) {
+                            ctx.beginPath(); ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 6/view.scale; ctx.lineCap='round';
+                            ctx.moveTo(activePath[0].x, activePath[0].y);
+                            for(let i=1; i<activePath.length; i++) ctx.lineTo(activePath[i].x, activePath[i].y);
+                            ctx.stroke();
+                        }
+                        nodes.forEach(n => {
+                            if (previewMode && n.type === 'walkable') return;
+                            const isSel = selectedId === n.id;
+                            ctx.beginPath(); ctx.arc(n.x, n.y, (isSel ? 12 : 8)/view.scale, 0, Math.PI*2);
+                            ctx.fillStyle = n.color || CONFIG.colors[n.type] || CONFIG.colors.walkable; ctx.fill();
+                            if(isSel || (previewMode && activePath.includes(n))) { ctx.strokeStyle = '#fff'; ctx.lineWidth=2/view.scale; ctx.stroke(); }
+                        });
+                        ctx.restore(); needsRender.current = false;
+                    }
+                    animationFrameId = requestAnimationFrame(render);
+                };
+                render();
+                return () => cancelAnimationFrame(animationFrameId);
+            }, [nodes, edges, view, selectedId, previewMode, activePath]);
+
+            // Handlers (Simplified)
+            const handleMouseDown = (e) => {
+                const rect = containerRef.current.getBoundingClientRect();
+                const wPos = { x: (e.clientX - rect.left - view.x)/view.scale, y: (e.clientY - rect.top - view.y)/view.scale };
+                const hitNode = nodes.find(n => Math.hypot(n.x - wPos.x, n.y - wPos.y) < CONFIG.hitRadius/view.scale);
+                if (toolMode === 'pan' || e.button === 1) { dragRef.current = { type: 'pan', sx: e.clientX, sy: e.clientY, vStart: {...view} }; return; }
+                if (previewMode) return;
+                if (toolMode === 'select') { if (hitNode) { setSelectedId(hitNode.id); dragRef.current = { type: 'move', id: hitNode.id }; } else setSelectedId(null); }
+                else if (toolMode === 'node') { if (hitNode) setSelectedId(hitNode.id); else { const id = UTILS.generateId(); setNodes([...nodes, { id, x: wPos.x, y: wPos.y, type: 'walkable', name: 'New Node' }]); setSelectedId(id); } }
+                else if (toolMode === 'edge' && hitNode) tempEdgeRef.current = { start: hitNode.id, curr: wPos };
+                needsRender.current = true;
+            };
+            const handleMouseMove = (e) => {
+                const wPos = { x: (e.clientX - containerRef.current.getBoundingClientRect().left - view.x)/view.scale, y: (e.clientY - containerRef.current.getBoundingClientRect().top - view.y)/view.scale };
+                if (dragRef.current?.type === 'pan') { setView({ ...view, x: dragRef.current.vStart.x + (e.clientX - dragRef.current.sx), y: dragRef.current.vStart.y + (e.clientY - dragRef.current.sy) }); }
+                else if (dragRef.current?.type === 'move') { setNodes(nodes.map(n => n.id === dragRef.current.id ? { ...n, x: wPos.x, y: wPos.y } : n)); }
+                else if (tempEdgeRef.current) tempEdgeRef.current.curr = wPos;
+                needsRender.current = true;
+            };
+            const handleMouseUp = (e) => {
+                const wPos = { x: (e.clientX - containerRef.current.getBoundingClientRect().left - view.x)/view.scale, y: (e.clientY - containerRef.current.getBoundingClientRect().top - view.y)/view.scale };
+                if (tempEdgeRef.current) {
+                    const hitNode = nodes.find(n => Math.hypot(n.x - wPos.x, n.y - wPos.y) < CONFIG.hitRadius/view.scale);
+                    if (hitNode && hitNode.id !== tempEdgeRef.current.start) setEdges([...edges, { id: UTILS.generateId(), from: tempEdgeRef.current.start, to: hitNode.id }]);
+                    tempEdgeRef.current = null;
+                }
+                dragRef.current = null; needsRender.current = true;
+            };
+
+            const updateNode = (id, f, v) => setNodes(nodes.map(n => n.id === id ? { ...n, [f]: v } : n));
+            
+            const handleLogoUpload = (e, nodeId) => {
+                const file = e.target.files[0];
+                if (!file || file.size > 102400) return alert("File too large (Max 100KB)");
+                const reader = new FileReader(); reader.onload = (evt) => updateNode(nodeId, 'logo', evt.target.result); reader.readAsDataURL(file);
+            };
+
+            const prepareData = () => ({ metadata: { version: "3.2", name: UTILS.sanitize(mapName), mapImage }, nodes, edges });
+            
+            const handleDeploy = async () => {
+                if(!mapImage) return alert("Upload map first"); setIsWorking(true);
+                try {
+                    const code = await deployToKiosk(prepareData(), `map_${UTILS.generateId()}`, userId);
+                    alert(`Deployed! Pairing Code: ${code}`);
+                } catch(e) { alert(e.message); } setIsWorking(false);
+            };
+
+            const handleSync = async () => {
+                if(!mapId) return; setIsWorking(true);
+                try { await syncUpdates(prepareData(), mapId, userId); alert("Synced successfully!"); } 
+                catch(e) { alert(e.message); } setIsWorking(false);
+            };
+
+            const exportMap = () => {
+                const data = JSON.stringify(prepareData());
+                const blob = new Blob([data], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href=url; a.download = `${mapName}.json`; a.click();
+            };
+
+            const selectedNode = nodes.find(n => n.id === selectedId);
+            const searchResults = searchQuery ? nodes.filter(n => n.type === 'destination' && n.name.toLowerCase().includes(searchQuery.toLowerCase())) : [];
+
+            return (
+                <div className="flex flex-col h-full bg-white text-slate-800">
+                    {/* Toolbar */}
+                    <div className="h-16 border-b flex items-center justify-between px-6 bg-white z-20">
+                        <div className="flex items-center gap-4">
+                            {mapId && <button onClick={onBack} className="text-slate-500 hover:text-slate-800"><Icon name="arrow-left" /></button>}
+                            <input value={mapName} onChange={(e) => setMapName(UTILS.sanitize(e.target.value))} className="font-bold text-lg outline-none" />
+                        </div>
+                        <div className="flex gap-2 items-center">
+                            <div className="bg-slate-100 p-1 rounded-lg border flex mr-2">
+                                <button onClick={()=>setPreviewMode(false)} className={`px-3 py-1.5 text-xs font-bold rounded ${!previewMode?'bg-white shadow text-blue-600':'text-slate-500'}`}>Edit</button>
+                                <button onClick={()=>setPreviewMode(true)} className={`px-3 py-1.5 text-xs font-bold rounded ${previewMode?'bg-white shadow text-green-600':'text-slate-500'}`}>Preview</button>
+                            </div>
+                            <button onClick={exportMap} className="px-3 py-2 text-xs font-bold bg-slate-100 text-slate-700 rounded-lg">Export</button>
+                            {mapId ? (
+                                <button onClick={handleSync} disabled={isWorking} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2"><Icon name="sync" className={isWorking?"fa-spin":""} /> Sync</button>
+                            ) : (
+                                <button onClick={handleDeploy} disabled={isWorking} className="bg-brand-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2"><Icon name="cloud-upload-alt" /> Deploy</button>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex overflow-hidden">
+                        {/* Editor Sidebar - Only if NOT in preview */}
+                        {!previewMode && (
+                            <div className="w-16 border-r flex flex-col items-center py-4 gap-4 bg-white z-10">
+                                {['select', 'node', 'edge', 'pan'].map(t => (
+                                    <button key={t} onClick={()=>setToolMode(t)} className={`w-10 h-10 rounded-lg flex items-center justify-center ${toolMode===t ? 'bg-blue-100 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}><Icon name={t==='select'?'mouse-pointer':t==='node'?'circle-dot':t==='edge'?'draw-polygon':'hand'} /></button>
+                                ))}
+                            </div>
+                        )}
+                        
+                        <div className="flex-1 bg-slate-100 relative overflow-hidden cursor-crosshair" ref={containerRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={(e)=>{setView(v=>({...v, scale:Math.max(0.1, v.scale*(1-e.deltaY*0.001))})); needsRender.current=true;}}>
+                            <canvas ref={canvasRef} className="block" />
+                            {!mapImage && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="bg-white/80 p-6 rounded-xl shadow-lg">Upload Floor Plan to Start 👇</div></div>}
+                            
+                            {/* PREVIEW UI OVERLAYS */}
+                            {previewMode && (
+                                <>
+                                    {/* SEARCH BAR */}
+                                    <div className="absolute top-6 right-6 w-80 z-30">
+                                        <div className="bg-white rounded-xl shadow-lg border p-3 flex items-center">
+                                            <Icon name="search" className="text-slate-400 ml-2" />
+                                            <input className="flex-1 ml-3 outline-none text-sm" placeholder="Find store, room..." value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} />
+                                            {searchQuery && <button onClick={()=>setSearchQuery('')}><Icon name="times" className="text-slate-400" /></button>}
+                                        </div>
+                                        {searchResults.length > 0 && (
+                                            <div className="mt-2 bg-white rounded-xl shadow-xl max-h-60 overflow-y-auto border">
+                                                {searchResults.map(n => (
+                                                    <div key={n.id} onClick={()=>navigateTo(n)} className="p-3 border-b hover:bg-slate-50 cursor-pointer flex justify-between">
+                                                        <span className="font-bold text-sm">{n.name}</span>
+                                                        <span className="text-[10px] bg-slate-100 px-2 rounded-full uppercase">{n.type}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* QUICK ACTIONS */}
+                                    <div className="absolute bottom-6 right-6 flex gap-3 z-30">
+                                        {[
+                                            { t: 'bathroom', i: 'restroom', l: 'Restroom' },
+                                            { t: 'elevator', i: 'elevator', l: 'Elevator' },
+                                            { t: 'stairs', i: 'walking', l: 'Stairs' },
+                                            { t: 'exit', i: 'door-open', l: 'Exit' }
+                                        ].map(action => (
+                                            <button key={action.t} onClick={()=>findNearest(action.t)} className="flex flex-col items-center gap-1 group">
+                                                <div className="w-12 h-12 bg-white rounded-full shadow-lg border flex items-center justify-center text-slate-600 group-hover:text-blue-600 group-hover:border-blue-200 transition-all">
+                                                    <Icon name={action.i} className="text-lg" />
+                                                </div>
+                                                <span className="text-[10px] font-bold text-slate-500 bg-white/80 px-2 rounded-full backdrop-blur-sm shadow-sm">{action.l}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* PROPERTIES PANEL - Only if NOT in preview */}
+                        {!previewMode && (
+                            <div className="w-80 bg-white border-l shadow-xl z-10 overflow-y-auto">
+                                <div className="p-4 border-b font-bold text-xs uppercase text-slate-500">Properties</div>
+                                <div className="p-4 space-y-4">
+                                    {selectedNode ? (
+                                        <>
+                                            <div><label className="text-xs font-bold block mb-1">Name</label><input className="w-full border p-2 rounded text-sm" value={selectedNode.name} onChange={(e)=>updateNode(selectedId, 'name', e.target.value)} /></div>
+                                            <div>
+                                                <label className="text-xs font-bold block mb-1">Type</label>
+                                                <select className="w-full border p-2 rounded text-sm" value={selectedNode.type} onChange={(e)=>updateNode(selectedId, 'type', e.target.value)}>
+                                                    {Object.keys(CONFIG.colors).map(k=><option key={k} value={k}>{k}</option>)}
+                                                    <option value="custom">Custom...</option>
+                                                </select>
+                                            </div>
+                                            {selectedNode.type === 'custom' && (
+                                                <div className="bg-slate-50 p-3 rounded border">
+                                                    <input className="w-full border p-2 rounded text-sm mb-2" placeholder="Label (e.g. ATM)" value={selectedNode.customTypeLabel||''} onChange={(e)=>updateNode(selectedId, 'customTypeLabel', e.target.value)} />
+                                                    <input type="color" className="h-8 w-full" value={selectedNode.color||'#000000'} onChange={(e)=>updateNode(selectedId, 'color', e.target.value)} />
+                                                </div>
+                                            )}
+                                            <div><label className="text-xs font-bold block mb-1">Logo (100KB)</label><input type="file" onChange={(e)=>handleLogoUpload(e, selectedId)} className="text-xs w-full" /></div>
+                                            <div><label className="text-xs font-bold block mb-1">Description</label><textarea className="w-full border p-2 rounded text-sm" rows="3" value={selectedNode.description||''} onChange={(e)=>updateNode(selectedId, 'description', e.target.value)} /></div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div><label className="text-xs font-bold">Open</label><input type="time" className="w-full border p-2 rounded text-sm" value={selectedNode.openTime||''} onChange={(e)=>updateNode(selectedId, 'openTime', e.target.value)} /></div>
+                                                <div><label className="text-xs font-bold">Close</label><input type="time" className="w-full border p-2 rounded text-sm" value={selectedNode.closeTime||''} onChange={(e)=>updateNode(selectedId, 'closeTime', e.target.value)} /></div>
+                                            </div>
+                                            <button onClick={()=>{setNodes(nodes.filter(n=>n.id!==selectedId)); setSelectedId(null);}} className="w-full bg-red-50 text-red-600 py-2 rounded text-xs font-bold mt-2">Delete Node</button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="bg-blue-50 p-4 rounded text-blue-800 text-sm mb-4">Select a node to edit.</div>
+                                            <label className="text-xs font-bold block mb-2">Upload Map Image</label>
+                                            <input type="file" onChange={(e)=>{
+                                                const f=e.target.files[0]; if(f){const r=new FileReader(); r.onload=(ev)=>{setMapImage(ev.target.result); setView({scale:0.5,x:20,y:20})}; r.readAsDataURL(f);}
+                                            }} className="w-full text-sm" />
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 5. MAIN APP SHELL ---
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [view, setView] = useState('studio'); // studio | maps | devices
+            const [currentMapData, setCurrentMapData] = useState(null);
+
+            useEffect(() => {
+                if(window.auth) window.auth.onAuthStateChanged(setUser);
+                const h = (e) => setUser(e.detail);
+                window.addEventListener('firebase-auth-initialized', h);
+                return () => window.removeEventListener('firebase-auth-initialized', h);
+            }, []);
+
+            if (!user) return <div className="h-full flex items-center justify-center bg-slate-100"><button onClick={()=>window.location.href='index.html'} className="bg-brand-600 text-white px-8 py-4 rounded-xl font-bold shadow-lg">Login to Studio</button></div>;
+
+            return (
+                <div className="flex h-full font-sans text-slate-800">
+                    {/* LEFT SIDEBAR RESTORED */}
+                    <div className="w-20 bg-slate-900 flex flex-col items-center py-6 gap-2 z-50 shadow-xl">
+                        <div className="w-10 h-10 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold text-xl mb-6">W</div>
+                        <NavButton active={view === 'studio'} icon="pen-nib" label="Studio" onClick={() => { setView('studio'); setCurrentMapData(null); }} />
+                        <NavButton active={view === 'maps'} icon="map" label="Maps" onClick={() => setView('maps')} />
+                        <NavButton active={view === 'devices'} icon="tablet-alt" label="Devices" onClick={() => setView('devices')} />
+                    </div>
+
+                    <div className="flex-1 bg-slate-100 overflow-hidden relative">
+                        <ErrorBoundary>
+                            {view === 'studio' && (
+                                <Editor 
+                                    key={currentMapData ? currentMapData.id : 'new'} 
+                                    initialData={currentMapData} 
+                                    userId={user.uid}
+                                    onBack={() => setView('maps')} 
+                                />
+                            )}
+                            {view === 'maps' && <MapLibrary userId={user.uid} onEditMap={(map) => { setCurrentMapData(map); setView('studio'); }} />}
+                            {view === 'devices' && <DeviceManager userId={user.uid} />}
+                        </ErrorBoundary>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
