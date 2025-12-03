@@ -18,8 +18,6 @@
 
     <style>
         body { overscroll-behavior: none; user-select: none; overflow: hidden; }
-        .you-are-here { position: relative; }
-        /* Screen Reader Only Class */
         .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
     </style>
 </head>
@@ -38,9 +36,7 @@
     </div>
 
     <div id="kiosk-ui" class="hidden flex-1 relative bg-slate-200" aria-hidden="true">
-        <canvas id="kioskCanvas" class="block w-full h-full" aria-label="Interactive Map" role="img">
-            Your browser does not support the map view. Please use the list search below.
-        </canvas>
+        <canvas id="kioskCanvas" class="block w-full h-full" aria-label="Interactive Map" role="img"></canvas>
 
         <div class="absolute top-6 right-6 w-80 z-20">
             <div class="bg-white rounded-xl shadow-2xl flex items-center p-3 border border-slate-200">
@@ -49,24 +45,28 @@
                 <input type="text" id="search-input" class="flex-1 ml-3 outline-none text-sm text-slate-800" placeholder="Find store, room...">
                 <button onclick="window.clearRoute()" class="text-slate-400 hover:text-slate-600" aria-label="Clear Search"><i class="fas fa-times"></i></button>
             </div>
-            <div id="search-results" class="hidden mt-2 bg-white rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto border border-slate-100" role="listbox"></div>
+            <div id="search-results" class="hidden mt-2 bg-white rounded-xl shadow-xl overflow-hidden max-h-96 overflow-y-auto border border-slate-100" role="listbox"></div>
         </div>
 
         <div class="absolute bottom-6 right-6 flex gap-3 z-20">
-            <button onclick="window.findNearest('bathroom')" aria-label="Find nearest Restroom" class="flex flex-col items-center gap-1 group">
-                <div class="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-slate-600 group-active:scale-95 transition-transform"><i class="fas fa-restroom text-xl"></i></div>
-            </button>
-            <button onclick="window.findNearest('elevator')" aria-label="Find nearest Elevator" class="flex flex-col items-center gap-1 group">
-                <div class="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-slate-600 group-active:scale-95 transition-transform"><i class="fas fa-elevator text-xl"></i></div>
-            </button>
+            <button onclick="window.findNearest('bathroom')" class="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-slate-600 active:scale-95 transition-transform"><i class="fas fa-restroom text-xl"></i></button>
+            <button onclick="window.findNearest('elevator')" class="w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-slate-600 active:scale-95 transition-transform"><i class="fas fa-elevator text-xl"></i></button>
         </div>
 
-        <div id="directions-card" class="absolute bottom-6 left-6 bg-white rounded-xl shadow-2xl p-4 transform translate-y-[150%] transition-transform duration-300 w-64" aria-live="assertive">
-            <div class="flex items-center">
-                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white text-lg mr-3"><i class="fas fa-walking"></i></div>
-                <div>
-                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Navigating to</p>
-                    <h3 class="text-sm font-bold text-slate-900 truncate w-32" id="target-name">Target</h3>
+        <div id="directions-card" class="absolute bottom-6 left-6 bg-white rounded-xl shadow-2xl p-5 transform translate-y-[150%] transition-transform duration-300 w-80 border border-slate-100" aria-live="assertive">
+            <div class="flex items-start">
+                <div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl mr-4 shrink-0 shadow-lg shadow-blue-200">
+                    <img id="target-logo" class="hidden w-full h-full object-cover rounded-lg" />
+                    <i id="target-icon" class="fas fa-walking"></i>
+                </div>
+                <div class="flex-1">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Navigating to</p>
+                    <h3 class="text-lg font-bold text-slate-900 leading-tight mb-1" id="target-name">Target</h3>
+                    
+                    <div id="target-meta" class="text-sm text-slate-500 space-y-1">
+                        <p id="target-desc" class="line-clamp-2 hidden"></p>
+                        <p id="target-hours" class="text-xs font-semibold text-green-600 bg-green-50 inline-block px-2 py-0.5 rounded hidden"></p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -76,7 +76,6 @@
         import { initializeApp } from "firebase/app";
         import { getFirestore, doc, getDoc, updateDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 
-        // SECURITY: Ideally, fetch these from a secure endpoint or use environment variables in a build step.
         const FIREBASE_CONFIG = {
             apiKey: "AIzaSyDWJ5qVnsA3rWvfkc0-_cIyfwLHEZNMuxE",
             authDomain: "wayfinder-app-a2565.firebaseapp.com",
@@ -86,80 +85,38 @@
             appId: "1:770872636942:web:f342a0d96de313a19a6e5f"
         };
 
-        // Initialize with Error Handling
         let db;
-        try { 
-            const app = initializeApp(FIREBASE_CONFIG); 
-            db = getFirestore(app); 
-        } catch(e) { 
-            console.error("Critical: Firebase failed to init", e);
-            document.body.innerHTML = "<div class='text-white p-10'>System Unavailable. Please contact support.</div>";
-        }
+        try { const app = initializeApp(FIREBASE_CONFIG); db = getFirestore(app); } catch(e) { console.error("Firebase Error", e); }
 
-        // STATE MANAGEMENT
-        const state = {
-            mapData: null,
-            img: new Image(),
-            scale: 1,
-            offset: {x:0, y:0},
-            activePath: [],
-            isDirty: false // PERFORMANCE: Only re-render when true
-        };
+        const state = { mapData: null, img: new Image(), scale: 1, offset: {x:0, y:0}, activePath: [], isDirty: false };
+        const canvas = document.getElementById('kioskCanvas'), ctx = canvas.getContext('2d');
 
-        const canvas = document.getElementById('kioskCanvas');
-        const ctx = canvas.getContext('2d');
-        const announcer = document.getElementById('a11y-announcer');
-
-        // SERVICE WORKER REGISTRATION (Offline Support)
-        if ('serviceWorker' in navigator) {
-            // Note: You must create a 'sw.js' file for this to actually cache assets
-            navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed'));
-        }
-
-        // --- PAIRING LOGIC ---
+        // --- PAIRING ---
         const savedCode = localStorage.getItem('wayfinder_pairing_code');
         if (savedCode) listenToConnection(savedCode); else showSetupScreen();
 
         window.pairDevice = async function() {
-            // SANITIZATION: Remove non-alphanumeric chars
             const rawInput = document.getElementById('pairing-code-input').value;
             const codeInput = rawInput.replace(/[^A-Z0-9]/gi, '').toUpperCase();
-            
             if (codeInput.length < 6) return;
-            
-            const btn = document.getElementById('btn-pair');
-            btn.innerText = "Verifying...";
-            btn.disabled = true;
-
+            document.getElementById('btn-pair').innerText = "Verifying...";
             try {
                 const codeRef = doc(db, "pairing_codes", codeInput);
                 const docSnap = await getDoc(codeRef);
                 if (!docSnap.exists()) throw new Error("Invalid Code");
-                
-                await updateDoc(codeRef, { 
-                    status: 'active', 
-                    pairedDevice: `dev_${Date.now()}`, 
-                    pairedAt: serverTimestamp() 
-                });
-                
+                await updateDoc(codeRef, { status: 'active', pairedDevice: 'dev_'+Date.now(), pairedAt: serverTimestamp() });
                 localStorage.setItem('wayfinder_pairing_code', codeInput);
                 listenToConnection(codeInput);
             } catch (err) {
-                const errBox = document.getElementById('pair-error');
-                errBox.innerText = err.message;
-                errBox.classList.remove('hidden');
-                btn.innerText = "Link Device";
-                btn.disabled = false;
+                document.getElementById('pair-error').innerText = err.message;
+                document.getElementById('pair-error').classList.remove('hidden');
+                document.getElementById('btn-pair').innerText = "Link Device";
             }
         };
 
         function listenToConnection(code) {
-            onSnapshot(doc(db, "pairing_codes", code), async (snapshot) => {
-                if (!snapshot.exists()) { 
-                    localStorage.removeItem('wayfinder_pairing_code'); 
-                    window.location.reload(); 
-                    return; 
-                }
+            onSnapshot(doc(db, "pairing_codes", code), (snapshot) => {
+                if (!snapshot.exists()) { localStorage.removeItem('wayfinder_pairing_code'); window.location.reload(); return; }
                 const data = snapshot.data();
                 if (data.mapId) loadMap(data.mapId, code);
             });
@@ -168,7 +125,6 @@
         function showSetupScreen() {
             document.getElementById('setup-screen').classList.remove('hidden');
             document.getElementById('kiosk-ui').classList.add('hidden');
-            document.getElementById('kiosk-ui').setAttribute('aria-hidden', 'true');
         }
 
         async function loadMap(mapId, pairingCode) {
@@ -183,15 +139,9 @@
                         state.mapData = docSnap.data();
                         const newImg = new Image();
                         newImg.onload = () => {
-                            state.img = newImg; 
-                            fitToScreen(); 
-                            state.isDirty = true; // Trigger render
-                            
+                            state.img = newImg; fitToScreen(); state.isDirty = true;
                             document.getElementById('setup-screen').classList.add('hidden');
-                            const ui = document.getElementById('kiosk-ui');
-                            ui.classList.remove('hidden');
-                            ui.setAttribute('aria-hidden', 'false');
-                            announce("Map loaded successfully");
+                            document.getElementById('kiosk-ui').classList.remove('hidden');
                         };
                         newImg.src = state.mapData.metadata.mapImage;
                     }
@@ -199,73 +149,52 @@
             } catch (e) { console.error(e); }
         }
 
-        // --- OPTIMIZED RENDERER ---
+        // --- RENDERER ---
         function fitToScreen() {
-            canvas.width = window.innerWidth; 
-            canvas.height = window.innerHeight;
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
             if(!state.img.width) return;
             state.scale = Math.min(canvas.width / state.img.width, canvas.height / state.img.height);
-            state.offset.x = (canvas.width - state.img.width * state.scale) / 2; 
+            state.offset.x = (canvas.width - state.img.width * state.scale) / 2;
             state.offset.y = (canvas.height - state.img.height * state.scale) / 2;
         }
 
         function draw() {
-            if (!state.isDirty) {
-                requestAnimationFrame(draw);
-                return;
-            }
-
+            if (!state.isDirty) { requestAnimationFrame(draw); return; }
             ctx.clearRect(0, 0, canvas.width, canvas.height); 
             ctx.save();
-            ctx.translate(state.offset.x, state.offset.y); 
-            ctx.scale(state.scale, state.scale);
-            
+            ctx.translate(state.offset.x, state.offset.y); ctx.scale(state.scale, state.scale);
             if(state.img.src && state.img.complete) ctx.drawImage(state.img, 0, 0);
             
             if (state.activePath.length > 0) {
-                ctx.beginPath(); 
-                ctx.lineWidth = 6 / state.scale; 
-                ctx.strokeStyle = '#2563eb'; 
-                ctx.lineCap = 'round'; 
-                ctx.lineJoin = 'round';
+                ctx.beginPath(); ctx.lineWidth = 6 / state.scale; ctx.strokeStyle = '#2563eb'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
                 ctx.moveTo(state.activePath[0].x, state.activePath[0].y);
                 for(let i=1; i<state.activePath.length; i++) ctx.lineTo(state.activePath[i].x, state.activePath[i].y);
                 ctx.stroke();
                 
-                // Markers
-                drawMarker(state.activePath[0], '#ef4444'); // Start
-                drawMarker(state.activePath[state.activePath.length-1], '#10b981'); // End
+                // Draw Markers respecting Custom Color if present
+                drawMarker(state.activePath[0], '#ef4444');
+                const endNode = state.activePath[state.activePath.length-1];
+                drawMarker(endNode, endNode.color || '#10b981');
             }
             ctx.restore();
-            state.isDirty = false; // Reset dirty flag
+            state.isDirty = false;
             requestAnimationFrame(draw);
         }
 
-        function drawMarker(node, color) {
-            ctx.beginPath(); 
-            ctx.arc(node.x, node.y, 10/state.scale, 0, Math.PI*2); 
-            ctx.fillStyle = color; 
-            ctx.fill(); 
-            ctx.strokeStyle = 'white'; 
-            ctx.lineWidth = 3/state.scale; 
-            ctx.stroke();
+        function drawMarker(node, defaultColor) {
+            ctx.beginPath(); ctx.arc(node.x, node.y, 10/state.scale, 0, Math.PI*2);
+            ctx.fillStyle = defaultColor; ctx.fill(); 
+            ctx.strokeStyle = 'white'; ctx.lineWidth = 3/state.scale; ctx.stroke();
         }
-
-        // Start loop
         requestAnimationFrame(draw);
 
-        // --- NAVIGATION ---
-        function announce(text) {
-            announcer.innerText = text;
-        }
-
+        // --- NAVIGATION & FEATURES ---
         window.findNearest = function(type) {
             if(!state.mapData) return;
             const kiosk = state.mapData.nodes.find(n => n.type === 'kiosk');
-            if(!kiosk) { alert("Kiosk location not set on map"); return; }
-            
+            if(!kiosk) return alert("Kiosk not set");
             const targets = state.mapData.nodes.filter(n => n.type === type);
-            if(targets.length === 0) { alert("No " + type + " found."); return; }
+            if(targets.length === 0) return alert("None found");
             
             let nearest = null, minDist = Infinity;
             targets.forEach(t => {
@@ -276,25 +205,50 @@
         };
 
         window.startNavigation = function(targetNode) {
-            const searchRes = document.getElementById('search-results');
-            searchRes.classList.add('hidden');
-            
-            // XSS Prevention: Use textContent instead of innerHTML
+            document.getElementById('search-results').classList.add('hidden');
             document.getElementById('search-input').value = targetNode.name;
             
             const kiosk = state.mapData.nodes.find(n => n.type === 'kiosk');
             if(!kiosk) return;
 
-            // Simple Pathfinding (Placeholder for A*)
-            const start = state.mapData.nodes.find(n => n.id === kiosk.id);
-            const end = state.mapData.nodes.find(n => n.id === targetNode.id);
-            state.activePath = [start, end];
+            state.activePath = [kiosk, targetNode]; // Replace with A* in prod
             
+            // --- POPULATE INFO CARD ---
             const card = document.getElementById('directions-card');
-            card.classList.remove('translate-y-[150%]');
+            const logoImg = document.getElementById('target-logo');
+            const icon = document.getElementById('target-icon');
+            const desc = document.getElementById('target-desc');
+            const hours = document.getElementById('target-hours');
+
             document.getElementById('target-name').textContent = targetNode.name;
-            
-            announce(`Navigating to ${targetNode.name}`);
+
+            // 1. Logo Handling
+            if (targetNode.logo) {
+                logoImg.src = targetNode.logo;
+                logoImg.classList.remove('hidden');
+                icon.classList.add('hidden');
+            } else {
+                logoImg.classList.add('hidden');
+                icon.classList.remove('hidden');
+            }
+
+            // 2. Description Handling
+            if (targetNode.description) {
+                desc.textContent = targetNode.description;
+                desc.classList.remove('hidden');
+            } else {
+                desc.classList.add('hidden');
+            }
+
+            // 3. Hours Handling
+            if (targetNode.openTime && targetNode.closeTime) {
+                hours.textContent = `Open: ${targetNode.openTime} - ${targetNode.closeTime}`;
+                hours.classList.remove('hidden');
+            } else {
+                hours.classList.add('hidden');
+            }
+
+            card.classList.remove('translate-y-[150%]');
             state.isDirty = true;
         };
 
@@ -302,37 +256,48 @@
             state.activePath = [];
             document.getElementById('search-input').value = '';
             document.getElementById('directions-card').classList.add('translate-y-[150%]');
-            announce("Route cleared");
             state.isDirty = true;
         };
 
-        // Search Listener
+        // --- SEARCH with LOGOS ---
         document.getElementById('search-input').addEventListener('input', (e) => {
-            const term = e.target.value.toLowerCase().replace(/[<>]/g, ""); // Basic Sanitization
+            const term = e.target.value.toLowerCase();
             const box = document.getElementById('search-results');
             if(term.length < 1) { box.classList.add('hidden'); return; }
             
-            const matches = state.mapData.nodes.filter(n => n.type === 'destination' && n.name.toLowerCase().includes(term));
+            // Allow searching by Name OR Custom Type
+            const matches = state.mapData.nodes.filter(n => {
+                if (n.type === 'walkable' || n.type === 'kiosk') return false;
+                const matchName = n.name.toLowerCase().includes(term);
+                const matchType = n.customTypeLabel ? n.customTypeLabel.toLowerCase().includes(term) : false;
+                return matchName || matchType;
+            });
+
             box.innerHTML = '';
             matches.forEach(n => {
                 const el = document.createElement('div');
-                el.className = "p-3 border-b hover:bg-slate-50 cursor-pointer flex justify-between";
-                el.role = "option";
-                // Safer innerHTML usage
-                const nameSpan = document.createElement('span');
-                nameSpan.className = "font-bold text-slate-700";
-                nameSpan.textContent = n.name;
-                el.appendChild(nameSpan);
+                el.className = "p-3 border-b hover:bg-slate-50 cursor-pointer flex items-center gap-3";
                 
+                // Show Logo in Search List
+                let iconHTML = `<div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400"><i class="fas fa-map-marker-alt"></i></div>`;
+                if (n.logo) {
+                    iconHTML = `<img src="${n.logo}" class="w-10 h-10 rounded-full object-cover border border-slate-200" />`;
+                }
+
+                el.innerHTML = `
+                    ${iconHTML}
+                    <div>
+                        <div class="font-bold text-slate-700 text-sm">${n.name}</div>
+                        <div class="text-xs text-slate-400 capitalize">${n.customTypeLabel || n.type}</div>
+                    </div>
+                `;
                 el.onclick = () => window.startNavigation(n);
                 box.appendChild(el);
             });
             box.classList.remove('hidden');
         });
 
-        window.addEventListener('resize', () => { 
-            if(state.img.src) { fitToScreen(); state.isDirty = true; } 
-        });
+        window.addEventListener('resize', () => { if(state.img.src) { fitToScreen(); state.isDirty = true; } });
     </script>
 </body>
 </html>
