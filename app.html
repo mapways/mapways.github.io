@@ -5,11 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Wayfinder Studio Enterprise</title>
     
-    <!-- React (UMD) -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -22,14 +20,11 @@
         }
     </script>
     
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
-    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- FIREBASE V9 MODULES -->
     <script type="importmap">
         {
             "imports": {
@@ -104,10 +99,34 @@
         </div>
     </div>
 
-    <!-- MAIN APPLICATION SCRIPT -->
-
-  <script type="text/babel" data-presets="react,typescript">
+    <script type="text/babel" data-presets="react,typescript">
         const { useState, useRef, useEffect, useCallback, Component } = React;
+
+        // --- 0. AUTH HOOK (FIXED: Added missing function) ---
+        function useAuthStatus() {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                const handleAuthInit = (e) => { setUser(e.detail); setLoading(false); };
+                window.addEventListener('firebase-auth-initialized', handleAuthInit);
+                
+                // Fallback check if window.auth is already ready
+                if (window.auth) {
+                    const unsubscribe = window.auth.onAuthStateChanged((u) => { 
+                        setUser(u); 
+                        setLoading(false); 
+                    });
+                    return () => {
+                        window.removeEventListener('firebase-auth-initialized', handleAuthInit);
+                        unsubscribe();
+                    };
+                }
+                
+                return () => window.removeEventListener('firebase-auth-initialized', handleAuthInit);
+            }, []);
+            return { user, loading };
+        }
 
         // --- 1. CONFIGURATION & SAFETY ---
         const ENV = {
@@ -473,5 +492,3 @@
     </script>
 </body>
 </html>
-
-
