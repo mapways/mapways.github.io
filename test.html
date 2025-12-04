@@ -412,8 +412,25 @@
                         )}
                         
                         <div className="flex-1 bg-slate-100 relative overflow-hidden cursor-crosshair" ref={containerRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={(e)=>{setView(v=>({...v, scale:Math.max(0.1, v.scale*(1-e.deltaY*0.001))})); needsRender.current=true;}}>
-                            <canvas ref={canvasRef} className="block" />
-                            {!mapImage && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="bg-white/80 p-6 rounded-xl shadow-lg">Upload Floor Plan to Start 👇</div></div>}
+                           <canvas ref={canvasRef} className="block" />
+                            
+                            {!mapImage && (
+                                <div className="absolute inset-0 flex items-center justify-center z-20">
+                                    <div className="bg-white p-8 rounded-2xl shadow-2xl text-center max-w-md border border-slate-100">
+                                        <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500 text-3xl">
+                                            <Icon name="map" />
+                                        </div>
+                                        <h2 className="text-xl font-bold text-slate-800 mb-2">Start Your Wayfinding Map</h2>
+                                        <p className="text-slate-500 mb-8">Upload a high-quality floor plan image to begin placing nodes and paths.</p>
+                                        <label className="inline-flex items-center px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl cursor-pointer transition-all shadow-lg hover:shadow-blue-500/30">
+                                            <Icon name="cloud-upload-alt" className="mr-2" /> Upload Floor Plan
+                                            <input type="file" onChange={handleImageUpload} className="hidden" accept="image/*" />
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+
+
                             
                             {/* PREVIEW UI OVERLAYS */}
                             {previewMode && (
