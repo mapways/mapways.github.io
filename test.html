@@ -397,11 +397,17 @@
 
                     <div className="flex-1 flex overflow-hidden">
                         {/* Editor Sidebar - Only if NOT in preview */}
+                       {/* Editor Sidebar - Only if NOT in preview */}
                         {!previewMode && (
                             <div className="w-16 border-r flex flex-col items-center py-4 gap-4 bg-white z-10">
                                 {['select', 'node', 'edge', 'pan'].map(t => (
                                     <button key={t} onClick={()=>setToolMode(t)} className={`w-10 h-10 rounded-lg flex items-center justify-center ${toolMode===t ? 'bg-blue-100 text-blue-600' : 'text-slate-400 hover:bg-slate-50'}`}><Icon name={t==='select'?'mouse-pointer':t==='node'?'circle-dot':t==='edge'?'draw-polygon':'hand'} /></button>
                                 ))}
+                                <div className="h-px w-8 bg-slate-200 my-2"></div>
+                                <label className="w-10 h-10 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 hover:text-blue-600 cursor-pointer transition-colors" title="Upload Map">
+                                    <Icon name="image" />
+                                    <input type="file" onChange={handleImageUpload} className="hidden" accept="image/*" />
+                                </label>
                             </div>
                         )}
                         
