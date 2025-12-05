@@ -181,6 +181,7 @@
 
         const DeviceManager = ({ userId }) => {
             const [devices, setDevices] = useState([]);
+            
             useEffect(() => {
                 const fetchDevs = async () => {
                     const q = window.query(window.collection(window.db, "pairing_codes"), window.where("ownerId", "==", userId));
@@ -189,15 +190,39 @@
                 }; fetchDevs();
             }, [userId]);
 
+            const deleteDevice = async (id) => {
+                if(!confirm("Revoke connection? The kiosk will return to setup screen.")) return;
+                try {
+                    await window.deleteDoc(window.doc(window.db, "pairing_codes", id));
+                    setDevices(devices.filter(d => d.id !== id));
+                } catch(e) { alert("Error: " + e.message); }
+            };
+
             return (
                 <div className="p-8 h-full bg-slate-50">
                     <h1 className="text-2xl font-bold text-slate-800 mb-6">Active Devices</h1>
                     <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
                         <table className="w-full text-sm text-left">
-                            <thead className="bg-slate-50 text-slate-500 font-bold"><tr><th className="p-4">Code</th><th className="p-4">Map ID</th><th className="p-4">Status</th></tr></thead>
+                            <thead className="bg-slate-50 text-slate-500 font-bold">
+                                <tr>
+                                    <th className="p-4">Code</th>
+                                    <th className="p-4">Map ID</th>
+                                    <th className="p-4">Status</th>
+                                    <th className="p-4">Attached</th>
+                                    <th className="p-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
                             <tbody>
                                 {devices.map(d => (
-                                    <tr key={d.id} className="border-t"><td className="p-4 font-mono text-blue-600 font-bold">{d.code}</td><td className="p-4 text-xs text-slate-500">{d.mapId}</td><td className="p-4"><span className={`px-2 py-1 rounded text-xs ${d.status==='active'?'bg-green-100 text-green-700':'bg-yellow-100 text-yellow-700'}`}>{d.status}</span></td></tr>
+                                    <tr key={d.id} className="border-t hover:bg-slate-50">
+                                        <td className="p-4 font-mono text-blue-600 font-bold">{d.code}</td>
+                                        <td className="p-4 text-xs text-slate-500 font-mono">{d.mapId}</td>
+                                        <td className="p-4"><span className={`px-2 py-1 rounded text-xs ${d.status==='active'?'bg-green-100 text-green-700':'bg-yellow-100 text-yellow-700'}`}>{d.status}</span></td>
+                                        <td className="p-4 text-slate-500">{d.pairedAt ? new Date(d.pairedAt.seconds * 1000).toLocaleString() : '-'}</td>
+                                        <td className="p-4 text-right">
+                                            <button onClick={() => deleteDevice(d.id)} className="bg-red-50 text-red-500 hover:bg-red-100 px-3 py-1 rounded border border-red-200 transition">Revoke</button>
+                                        </td>
+                                    </tr>
                                 ))}
                             </tbody>
                         </table>
@@ -221,7 +246,7 @@
             const [isWorking, setIsWorking] = useState(false);
             const [previewMode, setPreviewMode] = useState(false);
             
-            // Interactive State (Preview Only)
+            // Interactive State
             const [searchQuery, setSearchQuery] = useState('');
             const [activePath, setActivePath] = useState([]);
             
@@ -242,27 +267,23 @@
 
             useEffect(() => { needsRender.current = true; }, [nodes, edges, view, selectedId, toolMode, activePath, previewMode]);
 
-            // --- NAVIGATION LOGIC ---
             const findNearest = (type) => {
                 const kiosk = nodes.find(n => n.type === 'kiosk');
                 if (!kiosk) { alert("Please add a Kiosk node first."); return; }
                 const targets = nodes.filter(n => n.type === type);
                 if (targets.length === 0) { alert(`No ${type} found.`); return; }
-                
                 let nearest = null, minDist = Infinity;
                 targets.forEach(t => {
                     const d = Math.hypot(t.x - kiosk.x, t.y - kiosk.y);
                     if (d < minDist) { minDist = d; nearest = t; }
                 });
-                setActivePath([kiosk, nearest]);
-                needsRender.current = true;
+                setActivePath([kiosk, nearest]); needsRender.current = true;
             };
 
             const navigateTo = (node) => {
                 const kiosk = nodes.find(n => n.type === 'kiosk');
                 if (kiosk) setActivePath([kiosk, node]);
-                setSearchQuery('');
-                needsRender.current = true;
+                setSearchQuery(''); needsRender.current = true;
             };
 
             // --- RENDER LOOP ---
@@ -274,7 +295,6 @@
                         canvas.width = containerRef.current?.clientWidth || 800; canvas.height = containerRef.current?.clientHeight || 600;
                         ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save();
                         ctx.translate(view.x, view.y); ctx.scale(view.scale, view.scale);
-                        
                         if (imgRef.current) {
                             ctx.drawImage(imgRef.current, 0, 0);
                             if (!previewMode) {
@@ -294,9 +314,7 @@
                         });
                         if (previewMode && activePath.length > 0) {
                             ctx.beginPath(); ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 6/view.scale; ctx.lineCap='round';
-                            ctx.moveTo(activePath[0].x, activePath[0].y);
-                            for(let i=1; i<activePath.length; i++) ctx.lineTo(activePath[i].x, activePath[i].y);
-                            ctx.stroke();
+                            ctx.moveTo(activePath[0].x, activePath[0].y); for(let i=1; i<activePath.length; i++) ctx.lineTo(activePath[i].x, activePath[i].y); ctx.stroke();
                         }
                         nodes.forEach(n => {
                             if (previewMode && n.type === 'walkable') return;
@@ -345,11 +363,9 @@
             const updateNode = (id, f, v) => setNodes(nodes.map(n => n.id === id ? { ...n, [f]: v } : n));
             
             const handleLogoUpload = (e, nodeId) => {
-                const file = e.target.files[0];
-                if (!file || file.size > 102400) return alert("File too large (Max 100KB)");
-                const reader = new FileReader(); reader.onload = (evt) => updateNode(nodeId, 'logo', evt.target.result); reader.readAsDataURL(file);
+                const f = e.target.files[0]; if (!f) return;
+                const r = new FileReader(); r.onload = (evt) => updateNode(nodeId, 'logo', evt.target.result); r.readAsDataURL(f);
             };
-            
             const handleImageUpload = (e) => {
                 const f = e.target.files[0];
                 if(f) { const r = new FileReader(); r.onload = (ev) => { setMapImage(ev.target.result); setView({scale:0.5,x:20,y:20}); }; r.readAsDataURL(f); }
@@ -383,12 +399,11 @@
 
             return (
                 <div className="flex flex-col h-full bg-white text-slate-800">
-                    {/* Toolbar */}
                     <div className="h-16 border-b flex items-center justify-between px-6 bg-white z-20">
                         <div className="flex items-center gap-4">
                             {mapId && <button onClick={onBack} className="text-slate-500 hover:text-slate-800"><Icon name="arrow-left" /></button>}
                             <div>
-                                <input value={mapName} onChange={(e) => setMapName(UTILS.sanitize(e.target.value))} className="font-bold text-lg outline-none bg-transparent block" />
+                                <input value={mapName} onChange={(e) => setMapName(UTILS.sanitize(e.target.value))} className="font-bold text-lg outline-none block" />
                                 {mapId && <div className="text-[10px] text-slate-400 font-mono select-all">ID: {mapId}</div>}
                             </div>
                         </div>
@@ -407,7 +422,6 @@
                     </div>
 
                     <div className="flex-1 flex overflow-hidden">
-                        {/* Editor Sidebar - Only if NOT in preview */}
                         {!previewMode && (
                             <div className="w-16 border-r flex flex-col items-center py-4 gap-4 bg-white z-10">
                                 {['select', 'node', 'edge', 'pan'].map(t => (
@@ -415,23 +429,19 @@
                                 ))}
                                 <div className="h-px w-8 bg-slate-200 my-2"></div>
                                 <label className="w-10 h-10 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 hover:text-blue-600 cursor-pointer transition-colors" title="Upload Map">
-                                    <Icon name="image" />
-                                    <input type="file" onChange={handleImageUpload} className="hidden" accept="image/*" />
+                                    <Icon name="image" /> <input type="file" onChange={handleImageUpload} className="hidden" accept="image/*" />
                                 </label>
                             </div>
                         )}
                         
                         <div className="flex-1 bg-slate-100 relative overflow-hidden cursor-crosshair" ref={containerRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={(e)=>{setView(v=>({...v, scale:Math.max(0.1, v.scale*(1-e.deltaY*0.001))})); needsRender.current=true;}}>
                             <canvas ref={canvasRef} className="block" />
-                            
                             {!mapImage && (
                                 <div className="absolute inset-0 flex items-center justify-center z-20">
                                     <div className="bg-white p-8 rounded-2xl shadow-2xl text-center max-w-md border border-slate-100">
-                                        <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500 text-3xl">
-                                            <Icon name="map" />
-                                        </div>
+                                        <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500 text-3xl"><Icon name="map" /></div>
                                         <h2 className="text-xl font-bold text-slate-800 mb-2">Start Your Wayfinding Map</h2>
-                                        <p className="text-slate-500 mb-8">Upload a high-quality floor plan image to begin placing nodes and paths.</p>
+                                        <p className="text-slate-500 mb-8">Upload a high-quality floor plan image to begin.</p>
                                         <label className="inline-flex items-center px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl cursor-pointer transition-all shadow-lg hover:shadow-blue-500/30">
                                             <Icon name="cloud-upload-alt" className="mr-2" /> Upload Floor Plan
                                             <input type="file" onChange={handleImageUpload} className="hidden" accept="image/*" />
@@ -440,10 +450,8 @@
                                 </div>
                             )}
                             
-                            {/* PREVIEW UI OVERLAYS */}
                             {previewMode && (
                                 <>
-                                    {/* SEARCH BAR */}
                                     <div className="absolute top-6 right-6 w-80 z-30">
                                         <div className="bg-white rounded-xl shadow-lg border p-3 flex items-center">
                                             <Icon name="search" className="text-slate-400 ml-2" />
@@ -454,27 +462,17 @@
                                             <div className="mt-2 bg-white rounded-xl shadow-xl max-h-60 overflow-y-auto border">
                                                 {searchResults.map(n => (
                                                     <div key={n.id} onClick={()=>navigateTo(n)} className="p-3 border-b hover:bg-slate-50 cursor-pointer flex justify-between">
-                                                        <span className="font-bold text-sm">{n.name}</span>
-                                                        <span className="text-[10px] bg-slate-100 px-2 rounded-full uppercase">{n.type}</span>
+                                                        <span className="font-bold text-sm">{n.name}</span><span className="text-[10px] bg-slate-100 px-2 rounded-full uppercase">{n.type}</span>
                                                     </div>
                                                 ))}
                                             </div>
                                         )}
                                     </div>
-
-                                    {/* QUICK ACTIONS */}
                                     <div className="absolute bottom-6 right-6 flex gap-3 z-30">
-                                        {[
-                                            { t: 'bathroom', i: 'restroom', l: 'Restroom' },
-                                            { t: 'elevator', i: 'elevator', l: 'Elevator' },
-                                            { t: 'stairs', i: 'walking', l: 'Stairs' },
-                                            { t: 'exit', i: 'door-open', l: 'Exit' }
-                                        ].map(action => (
-                                            <button key={action.t} onClick={()=>findNearest(action.t)} className="flex flex-col items-center gap-1 group">
-                                                <div className="w-12 h-12 bg-white rounded-full shadow-lg border flex items-center justify-center text-slate-600 group-hover:text-blue-600 group-hover:border-blue-200 transition-all">
-                                                    <Icon name={action.i} className="text-lg" />
-                                                </div>
-                                                <span className="text-[10px] font-bold text-slate-500 bg-white/80 px-2 rounded-full backdrop-blur-sm shadow-sm">{action.l}</span>
+                                        {[{ t: 'bathroom', i: 'restroom', l: 'Restroom' }, { t: 'elevator', i: 'elevator', l: 'Elevator' }, { t: 'stairs', i: 'walking', l: 'Stairs' }, { t: 'exit', i: 'door-open', l: 'Exit' }].map(a => (
+                                            <button key={a.t} onClick={()=>findNearest(a.t)} className="flex flex-col items-center gap-1 group">
+                                                <div className="w-12 h-12 bg-white rounded-full shadow-lg border flex items-center justify-center text-slate-600 group-hover:text-blue-600 transition-all"><Icon name={a.i} className="text-lg" /></div>
+                                                <span className="text-[10px] font-bold text-slate-500 bg-white/80 px-2 rounded-full backdrop-blur-sm shadow-sm">{a.l}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -482,7 +480,6 @@
                             )}
                         </div>
 
-                        {/* PROPERTIES PANEL - Only if NOT in preview */}
                         {!previewMode && (
                             <div className="w-80 bg-white border-l shadow-xl z-10 overflow-y-auto">
                                 <div className="p-4 border-b font-bold text-xs uppercase text-slate-500">Properties</div>
@@ -490,13 +487,7 @@
                                     {selectedNode ? (
                                         <>
                                             <div><label className="text-xs font-bold block mb-1">Name</label><input className="w-full border p-2 rounded text-sm" value={selectedNode.name} onChange={(e)=>updateNode(selectedId, 'name', e.target.value)} /></div>
-                                            <div>
-                                                <label className="text-xs font-bold block mb-1">Type</label>
-                                                <select className="w-full border p-2 rounded text-sm" value={selectedNode.type} onChange={(e)=>updateNode(selectedId, 'type', e.target.value)}>
-                                                    {Object.keys(CONFIG.colors).map(k=><option key={k} value={k}>{k}</option>)}
-                                                    <option value="custom">Custom...</option>
-                                                </select>
-                                            </div>
+                                            <div><label className="text-xs font-bold block mb-1">Type</label><select className="w-full border p-2 rounded text-sm" value={selectedNode.type} onChange={(e)=>updateNode(selectedId, 'type', e.target.value)}>{Object.keys(CONFIG.colors).map(k=><option key={k} value={k}>{k}</option>)}<option value="custom">Custom...</option></select></div>
                                             {selectedNode.type === 'custom' && (
                                                 <div className="bg-slate-50 p-3 rounded border">
                                                     <input className="w-full border p-2 rounded text-sm mb-2" placeholder="Label (e.g. ATM)" value={selectedNode.customTypeLabel||''} onChange={(e)=>updateNode(selectedId, 'customTypeLabel', e.target.value)} />
@@ -505,17 +496,9 @@
                                             )}
                                             <div><label className="text-xs font-bold block mb-1">Logo (100KB)</label><input type="file" onChange={(e)=>handleLogoUpload(e, selectedId)} className="text-xs w-full" /></div>
                                             <div><label className="text-xs font-bold block mb-1">Description</label><textarea className="w-full border p-2 rounded text-sm" rows="3" value={selectedNode.description||''} onChange={(e)=>updateNode(selectedId, 'description', e.target.value)} /></div>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div><label className="text-xs font-bold">Open</label><input type="time" className="w-full border p-2 rounded text-sm" value={selectedNode.openTime||''} onChange={(e)=>updateNode(selectedId, 'openTime', e.target.value)} /></div>
-                                                <div><label className="text-xs font-bold">Close</label><input type="time" className="w-full border p-2 rounded text-sm" value={selectedNode.closeTime||''} onChange={(e)=>updateNode(selectedId, 'closeTime', e.target.value)} /></div>
-                                            </div>
                                             <button onClick={()=>{setNodes(nodes.filter(n=>n.id!==selectedId)); setSelectedId(null);}} className="w-full bg-red-50 text-red-600 py-2 rounded text-xs font-bold mt-2">Delete Node</button>
                                         </>
-                                    ) : (
-                                        <>
-                                            <div className="bg-blue-50 p-4 rounded text-blue-800 text-sm mb-4">Select a node to edit.</div>
-                                        </>
-                                    )}
+                                    ) : <div className="bg-blue-50 p-4 rounded text-blue-800 text-sm mb-4">Select a node to edit.</div>}
                                 </div>
                             </div>
                         )}
@@ -527,7 +510,7 @@
         // --- 5. MAIN APP SHELL ---
         const App = () => {
             const [user, setUser] = useState(null);
-            const [view, setView] = useState('studio'); // studio | maps | devices
+            const [view, setView] = useState('studio'); 
             const [currentMapData, setCurrentMapData] = useState(null);
 
             useEffect(() => {
@@ -547,17 +530,9 @@
                         <NavButton active={view === 'maps'} icon="map" label="Maps" onClick={() => setView('maps')} />
                         <NavButton active={view === 'devices'} icon="tablet-alt" label="Devices" onClick={() => setView('devices')} />
                     </div>
-
                     <div className="flex-1 bg-slate-100 overflow-hidden relative">
                         <ErrorBoundary>
-                            {view === 'studio' && (
-                                <Editor 
-                                    key={currentMapData ? currentMapData.id : 'new'} 
-                                    initialData={currentMapData} 
-                                    userId={user.uid}
-                                    onBack={() => setView('maps')} 
-                                />
-                            )}
+                            {view === 'studio' && <Editor key={currentMapData ? currentMapData.id : 'new'} initialData={currentMapData} userId={user.uid} onBack={() => setView('maps')} />}
                             {view === 'maps' && <MapLibrary userId={user.uid} onEditMap={(map) => { setCurrentMapData(map); setView('studio'); }} />}
                             {view === 'devices' && <DeviceManager userId={user.uid} />}
                         </ErrorBoundary>
